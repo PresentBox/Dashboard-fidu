@@ -1,0 +1,564 @@
+<script>
+  var cacheDatos = null;
+  var usuarioAuditadoEmail = null;
+  var loteCambiosPendientes = {};
+  var facturacionSeleccionada = {};
+  var datosListosParaIngreso = false;
+
+  window.addEventListener('load', function() {
+    var botonEntrar = document.getElementById('btnEntrarApp');
+    if (botonEntrar) botonEntrar.addEventListener('click', entrarAplicacion);
+    cargarEcosistemaCRM();
+  });
+
+  function cargarEcosistemaCRM() {
+    mostrarLoader('Conciliando bases de datos en tiempo récord...');
+
+    google.script.run
+      .withSuccessHandler(inicializarCRM)
+      .withFailureHandler(mostrarError)
+      .obtenerEcosistemaLiquidaciones();
+  }
+
+  function inicializarCRM(respuesta) {
+    cacheDatos = respuesta;
+    var tieneAcceso = usuarioTieneAcceso(respuesta);
+    setText('txtEmail', respuesta.usuario);
+    setText('avatarLetra', respuesta.usuario.substring(0, 1).toUpperCase());
+    setText('avatarLetraHero', respuesta.usuario.substring(0, 1).toUpperCase());
+    setText('txtSaludando', obtenerNombreUsuario(respuesta.usuario));
+    setText('m1', respuesta.metricas.totalActivos);
+    setText('m2', respuesta.metricas.totalVariables);
+    setText('m3', respuesta.metricas.discrepancias);
+    setText('m4', respuesta.metricas.pendientesFacturacionPeriodo || 0);
+    document.getElementById('metricFacturacion').classList.toggle('hidden', !respuesta.esFacturacion);
+    setText('userMenuName', obtenerNombreUsuario(respuesta.usuario));
+    setText('userMenuEmail', respuesta.usuario);
+    setText('userMenuRole', 'Rol: ' + ((respuesta.rolesDisponibles || []).join(' / ') || 'Sin perfil detectado'));
+    setText('avatarLetraMenu', respuesta.usuario.substring(0, 1).toUpperCase());
+    actualizarEstadoHome(tieneAcceso);
+
+    configurarPerfil(respuesta);
+    configurarEventos();
+    asegurarFiltroComision();
+    cambiarPerfilDeVista();
+  }
+
+  function configurarEventos() {
+    var selectorPerfil = document.getElementById('cmbPerfilVista');
+    var botonAuditar = document.getElementById('btnAuditarUsuario');
+    var botonGuardar = document.getElementById('btnGuardarLote');
+    var botonRegistrarFacturacion = document.getElementById('btnRegistrarFacturacion');
+    var botonEntrar = document.getElementById('btnEntrarApp');
+    var avatarButton = document.getElementById('avatarButton');
+    var homeNav = document.getElementById('btnHomeNav');
+    var folderNav = document.getElementById('btnFolderNav');
+
+    if (selectorPerfil) selectorPerfil.onchange = cambiarPerfilDeVista;
+    if (botonAuditar) botonAuditar.onclick = auditarUsuarioFiltro;
+    if (botonGuardar) botonGuardar.onclick = guardarLoteCompletoCRM;
+    if (botonRegistrarFacturacion) botonRegistrarFacturacion.onclick = registrarPeriodoFacturado;
+    if (botonEntrar) botonEntrar.onclick = entrarAplicacion;
+    if (avatarButton) avatarButton.onclick = alternarMenuUsuario;
+    if (homeNav) homeNav.onclick = mostrarHome;
+    if (folderNav) folderNav.onclick = mostrarDashboard;
+  }
+
+  function configurarPerfil(respuesta) {
+    var selector = document.getElementById('cmbPerfilVista');
+
+    if (respuesta.esAdmin) {
+      setText('txtPerfilReal', 'Súper Administrador ⭐');
+      document.getElementById('panelAuditoriaAdmin').classList.remove('hidden');
+      if (selector) {
+        selector.innerHTML = '<option value="TODOS">Súper Admin (Ver Todo)</option><option value="BTM">Entorno: BTM</option><option value="FACTURACION">Facturación</option>';
+        selector.disabled = false;
+      }
+      return;
+    }
+
+    setText('txtPerfilReal', respuesta.rolesDisponibles.join(' / ') || 'BTM');
+    document.getElementById('panelAuditoriaAdmin').classList.add('hidden');
+    if (!selector) return;
+
+    if (respuesta.esFacturacion) {
+      selector.innerHTML = '<option value="FACTURACION">Facturación</option><option value="BTM">Entorno: BTM / Especialista</option>';
+      selector.disabled = false;
+    } else {
+      selector.innerHTML = '<option value="BTM">Entorno: BTM / Especialista</option>';
+      selector.disabled = true;
+    }
+  }
+
+  function asegurarFiltroComision() {
+    var cajaSelector = document.querySelector('.profile-selector-box');
+    if (!cajaSelector || document.getElementById('cmbFiltroComision')) return;
+
+    var selectFiltro = document.createElement('select');
+    selectFiltro.id = 'cmbFiltroComision';
+    selectFiltro.onchange = cambiarPerfilDeVista;
+    selectFiltro.innerHTML = '<option value="TODAS">🔍 Todas las Comisiones</option><option value="Variable">Solo Variables</option><option value="Fija">Solo Fijas</option>';
+    cajaSelector.appendChild(selectFiltro);
+  }
+
+  function auditarUsuarioFiltro() {
+    var correo = document.getElementById('txtBuscarUsuario').value.trim().toLowerCase();
+    usuarioAuditadoEmail = correo === '' ? null : correo;
+    setText('lblBandeja', usuarioAuditadoEmail ? 'Expedientes de: ' + correo : 'Bandeja de Control y Trazabilidad');
+    cambiarPerfilDeVista();
+  }
+
+  function cambiarPerfilDeVista() {
+    if (!cacheDatos) return;
+
+    var vista = getSelectValue('cmbPerfilVista', cacheDatos.esAdmin ? 'TODOS' : (cacheDatos.esFacturacion ? 'FACTURACION' : 'BTM'));
+    var filterComision = getSelectValue('cmbFiltroComision', 'TODAS');
+    var lista = cacheDatos.listaContratos || [];
+    var contenedor = document.getElementById('workspaceExpedientes');
+    var fragment = document.createDocumentFragment();
+    var contadorProcesados = 0;
+
+    contenedor.innerHTML = '';
+    document.getElementById('loader').style.display = 'none';
+
+    lista.forEach(function(item) {
+      if (!debeMostrarContrato(item, vista, filterComision)) return;
+      try {
+        contadorProcesados++;
+        fragment.appendChild(crearTarjetaContrato(item));
+      } catch (renderError) {
+        console.error('Error renderizando contrato', item && item.radicacion, renderError);
+      }
+    });
+
+    if (contadorProcesados === 0) {
+      contenedor.innerHTML = '<div class="loading">No se encontraron registros contractuales para la vista actual.</div>';
+      return;
+    }
+
+    contenedor.appendChild(fragment);
+  }
+
+  function debeMostrarContrato(item, vista, filterComision) {
+    var mostrarFila = false;
+
+    if (vista === 'FACTURACION' && cacheDatos.esFacturacion) {
+      mostrarFila = normalizarEstado(item.estadoActual) === 'activo' && !item.facturadoPeriodoActual;
+    } else if (cacheDatos.esAdmin && vista === 'TODOS' && !usuarioAuditadoEmail) {
+      mostrarFila = true;
+    } else {
+      var correoAValidar = usuarioAuditadoEmail || cacheDatos.usuario;
+      mostrarFila = item.asignados.GerenteBTM === correoAValidar || item.asignados.ProfesionalSujeto === correoAValidar;
+    }
+
+    if (filterComision !== 'TODAS' && item.esquemaComision !== filterComision) {
+      mostrarFila = false;
+    }
+
+    return mostrarFila;
+  }
+
+  function crearTarjetaContrato(item) {
+    var tarjeta = document.createElement('article');
+    var estadoEnUso = loteCambiosPendientes[item.radicacion] || item.estadoActual;
+    var estaPendiente = Boolean(loteCambiosPendientes[item.radicacion]);
+
+    tarjeta.className = 'crm-card-file' + (estaPendiente ? ' changed-pending-crm' : '');
+    tarjeta.id = 'card_' + item.radicacion;
+
+    tarjeta.appendChild(crearFilaPrincipal(item, estadoEnUso));
+    tarjeta.appendChild(crearBloqueDatosOperacion(item));
+    tarjeta.appendChild(crearBloquePreLiquidacion(item));
+    if (cacheDatos.esFacturacion && getSelectValue('cmbPerfilVista', '') === 'FACTURACION') {
+      tarjeta.appendChild(crearSelectorFacturacion(item));
+    }
+    tarjeta.appendChild(crearFilaAcciones(item));
+
+    return tarjeta;
+  }
+
+  function crearFilaPrincipal(item, estadoEnUso) {
+    var fila = document.createElement('div');
+    fila.className = 'crm-card-row';
+
+    var radicacion = document.createElement('div');
+    radicacion.className = 'rad-id';
+    radicacion.innerHTML = '<i class="fa-solid fa-receipt"></i> ';
+    radicacion.appendChild(document.createTextNode(item.radicacion));
+
+    var detalle = document.createElement('div');
+    detalle.style.flex = '1';
+    detalle.innerHTML = '<p class="negocio-name"></p><p class="negocio-sub"></p>';
+    detalle.querySelector('.negocio-name').textContent = item.nombreNegocio;
+    detalle.querySelector('.negocio-sub').textContent = 'Código FIDUSAP: ' + (item.codigoFidusap || 'Sin código') + ' | Tipo: ' + item.tipoGeneral + ' | Esquema: ' + item.esquemaComision;
+
+    var validacion = document.createElement('div');
+    validacion.appendChild(crearBadgeValidacion(item.validacionSFC));
+
+    var estado = document.createElement('div');
+    estado.appendChild(crearSelectEstado(item, estadoEnUso));
+
+    fila.appendChild(radicacion);
+    fila.appendChild(detalle);
+    fila.appendChild(validacion);
+    fila.appendChild(estado);
+    return fila;
+  }
+
+
+  function crearBloqueDatosOperacion(item) {
+    var grid = document.createElement('div');
+    grid.className = 'operation-data-grid';
+
+    [
+      ['Código FIDUSAP', item.codigoFidusap],
+      ['No. de Radicación', item.radicacion],
+      ['Nombre del negocio', item.nombreNegocioControl || item.nombreNegocio],
+      ['Gerente BTM', item.asignados.GerenteBTM || 'Sin asignar'],
+      ['Profesional BTM', item.asignados.ProfesionalBTM || item.asignados.ProfesionalSujeto || 'Sin asignar'],
+      ['Profesional especializado contable', item.asignados.ProfesionalContable || item.asignados.Contador || 'Sin asignar'],
+      ['Estado', item.estadoActual],
+      ['Fecha de constitución', item.fechaConstitucion || 'No registrada'],
+      ['Fecha de vigencia', item.fechaVigencia || 'No registrada']
+    ].forEach(function(row) {
+      var field = document.createElement('div');
+      field.className = 'operation-field';
+      var label = document.createElement('span');
+      label.textContent = row[0];
+      var value = document.createElement('strong');
+      value.textContent = row[1] || 'No registrado';
+      field.appendChild(label);
+      field.appendChild(value);
+      grid.appendChild(field);
+    });
+
+    return grid;
+  }
+
+  function crearBloquePreLiquidacion(item) {
+    var wrapper = document.createElement('div');
+    wrapper.className = 'preliquidation-box';
+
+    var title = document.createElement('div');
+    title.className = 'preliquidation-title';
+    title.innerHTML = '<i class="fa-solid fa-file-invoice-dollar"></i> Pre liquidación';
+
+    var columns = document.createElement('div');
+    columns.className = 'preliquidation-columns';
+    ['Comisión fija', 'Comisión variable pagos', 'Comisión variable FICs', 'V. comisión acreedores garantizados', 'Subcuentas'].forEach(function(label) {
+      var col = document.createElement('div');
+      col.textContent = label;
+      columns.appendChild(col);
+    });
+
+    wrapper.appendChild(title);
+    wrapper.appendChild(columns);
+    return wrapper;
+  }
+
+  function crearBadgeValidacion(validacionSFC) {
+    var badge = document.createElement('span');
+    var esOk = validacionSFC === 'OK';
+    badge.className = 'badge ' + (esOk ? 'badge-ok' : 'badge-alert');
+    badge.innerHTML = esOk ? '<i class="fa-solid fa-circle-check"></i> ' : '<i class="fa-solid fa-triangle-exclamation"></i> ';
+    badge.appendChild(document.createTextNode(esOk ? 'Conciliación Única OK' : validacionSFC));
+    return badge;
+  }
+
+  function crearSelectEstado(item, estadoEnUso) {
+    var select = document.createElement('select');
+    select.className = 'select-estado-sfc';
+    select.dataset.radicacion = item.radicacion;
+    select.dataset.estadoOriginal = item.estadoActual;
+    if (cacheDatos.esFacturacion && getSelectValue('cmbPerfilVista', '') === 'FACTURACION') {
+      select.disabled = true;
+      select.title = 'Facturación solo visualiza estados y registra periodos facturados.';
+    } else {
+      select.onchange = function() { registrarCambioEnLote(item.radicacion, select, item.estadoActual); };
+    }
+
+    ['Activo', 'Inactivo', 'En Liquidación'].forEach(function(estado) {
+      var option = document.createElement('option');
+      option.value = estado;
+      option.textContent = obtenerIconoEstado(estado) + ' ' + estado;
+      option.selected = normalizarEstado(estadoEnUso) === normalizarEstado(estado);
+      select.appendChild(option);
+    });
+
+    return select;
+  }
+
+  function crearMetaBox(item) {
+    var meta = document.createElement('div');
+    meta.className = 'info-meta-box';
+
+    var nit = document.createElement('div');
+    nit.innerHTML = '<strong>Nombre del Negocio (Col G Control):</strong> ';
+    var nitValue = document.createElement('span');
+    nitValue.style.fontWeight = '600';
+    nitValue.style.color = '#1a73e8';
+    nitValue.textContent = item.nitNombreControl;
+    nit.appendChild(nitValue);
+
+    var parametro = document.createElement('div');
+    parametro.innerHTML = '<strong>Parámetro Col J:</strong> ';
+    parametro.appendChild(document.createTextNode(item.textoComisionOriginal + ' | '));
+    parametro.insertAdjacentHTML('beforeend', '<strong>Profesional contable:</strong> ');
+    parametro.appendChild(document.createTextNode(item.asignados.ProfesionalContable || item.asignados.Contador || 'Sin asignar'));
+
+    meta.appendChild(nit);
+    meta.appendChild(parametro);
+    return meta;
+  }
+
+  function crearSelectorFacturacion(item) {
+    var wrapper = document.createElement('label');
+    wrapper.className = 'billing-check-row';
+
+    var checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = Boolean(facturacionSeleccionada[item.radicacion]);
+    checkbox.onchange = function() {
+      if (checkbox.checked) {
+        facturacionSeleccionada[item.radicacion] = true;
+      } else {
+        delete facturacionSeleccionada[item.radicacion];
+      }
+      actualizarBarraFacturacionUI();
+    };
+
+    wrapper.appendChild(checkbox);
+    wrapper.appendChild(document.createTextNode(' Marcar este negocio como facturado para el periodo ' + (cacheDatos.periodoActual || 'actual')));
+    return wrapper;
+  }
+
+  function crearFilaAcciones(item) {
+    var fila = document.createElement('div');
+    fila.className = 'crm-card-row';
+    fila.style.justifyContent = 'flex-end';
+    fila.style.paddingTop = '5px';
+    fila.style.borderTop = '1px dashed #e1e4e8';
+
+    var zona = document.createElement('div');
+    zona.className = 'action-zone';
+
+    if (item.esquemaComision === 'Variable') {
+      zona.appendChild(crearInputMonto(item.radicacion));
+      zona.appendChild(document.createTextNode(' '));
+      zona.appendChild(crearBotonLiquidar(item.radicacion));
+    } else {
+      zona.innerHTML = '<span style="color:#137333; font-size:12px; font-weight:600;"><i class="fa-solid fa-circle-check"></i> Tarifa Fija Automatizada</span>';
+    }
+
+    fila.appendChild(zona);
+    return fila;
+  }
+
+  function crearInputMonto(radicacion) {
+    var input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.className = 'crm-input';
+    input.id = 'input_' + radicacion;
+    input.placeholder = '$ Base Variable';
+    return input;
+  }
+
+  function crearBotonLiquidar(radicacion) {
+    var button = document.createElement('button');
+    button.className = 'crm-btn crm-btn-primary';
+    button.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar';
+    button.onclick = function() { enviarLiquidacionBTM(radicacion); };
+    return button;
+  }
+
+  function registrarCambioEnLote(radicacion, elementoSelect, estadoOriginalHoja) {
+    var nuevoEstado = elementoSelect.value;
+    var tarjeta = document.getElementById('card_' + radicacion);
+
+    if (normalizarEstado(nuevoEstado) === normalizarEstado(estadoOriginalHoja)) {
+      delete loteCambiosPendientes[radicacion];
+      if (tarjeta) tarjeta.classList.remove('changed-pending-crm');
+    } else {
+      loteCambiosPendientes[radicacion] = nuevoEstado;
+      if (tarjeta) tarjeta.classList.add('changed-pending-crm');
+    }
+
+    actualizarBarraFlotanteUI();
+  }
+
+  function actualizarBarraFlotanteUI() {
+    var longitudLote = Object.keys(loteCambiosPendientes).length;
+    var barra = document.getElementById('floatingSaveBar');
+    var contador = document.getElementById('txtLoteCount');
+
+    setText('txtLoteCount', longitudLote);
+    barra.classList.toggle('hidden', longitudLote === 0);
+    contador.setAttribute('aria-label', longitudLote + ' cambios pendientes');
+  }
+
+  function actualizarBarraFacturacionUI() {
+    var cantidad = Object.keys(facturacionSeleccionada).length;
+    setText('txtFacturacionCount', cantidad);
+    document.getElementById('facturacionActionBar').classList.toggle('hidden', cantidad === 0);
+  }
+
+  function registrarPeriodoFacturado() {
+    var radicaciones = Object.keys(facturacionSeleccionada);
+    if (radicaciones.length === 0) {
+      alert('Selecciona al menos un negocio.');
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function(respuesta) {
+        alert(respuesta);
+        facturacionSeleccionada = {};
+        actualizarBarraFacturacionUI();
+        cargarEcosistemaCRM();
+      })
+      .withFailureHandler(function(err) { alert('Error al registrar facturación: ' + err.message); })
+      .registrarFacturacionPeriodo(radicaciones);
+  }
+
+  function guardarLoteCompletoCRM() {
+    var barra = document.getElementById('floatingSaveBar');
+    var botonGuardar = document.getElementById('btnGuardarLote');
+
+    botonGuardar.disabled = true;
+    barra.style.pointerEvents = 'none';
+    barra.style.opacity = '0.6';
+    mostrarLoader('Procesando transacciones en bloque y enviando alertas unificadas...');
+
+    google.script.run
+      .withSuccessHandler(function(resultadoServidor) {
+        alert(resultadoServidor);
+        loteCambiosPendientes = {};
+        actualizarBarraFlotanteUI();
+        restaurarBarraLote();
+        cargarEcosistemaCRM();
+      })
+      .withFailureHandler(function(err) {
+        alert('Error al procesar el lote: ' + err.message);
+        restaurarBarraLote();
+        document.getElementById('loader').style.display = 'none';
+      })
+      .guardarAjustesEnLote(loteCambiosPendientes);
+  }
+
+  function restaurarBarraLote() {
+    var barra = document.getElementById('floatingSaveBar');
+    var botonGuardar = document.getElementById('btnGuardarLote');
+    botonGuardar.disabled = false;
+    barra.style.pointerEvents = 'auto';
+    barra.style.opacity = '1';
+  }
+
+  function enviarLiquidacionBTM(radicacion) {
+    var monto = Number(document.getElementById('input_' + radicacion).value);
+    if (!monto || monto <= 0) {
+      alert('Ingresa un monto válido.');
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function(res) { alert(res); })
+      .withFailureHandler(function(err) { alert('Error al enviar liquidación: ' + err.message); })
+      .ejecutarAccionServidor(radicacion, 'LIQUIDAR', monto, 'BTM');
+  }
+
+  function mostrarLoader(mensaje) {
+    var loader = document.getElementById('loader');
+    loader.style.display = 'block';
+    loader.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> ' + mensaje;
+  }
+
+  function mostrarError(err) {
+    document.getElementById('loader').innerHTML = '<span style="color:#c5221f; font-weight:bold;">Error: ' + err.message + '</span>';
+    setText('homeStatus', 'No fue posible cargar la información: ' + err.message);
+  }
+
+  function usuarioTieneAcceso(respuesta) {
+    return Boolean(respuesta && (respuesta.esAdmin || respuesta.esFacturacion || (respuesta.listaContratos || []).length > 0));
+  }
+
+  function actualizarEstadoHome(tieneAcceso) {
+    var boton = document.getElementById('btnEntrarApp');
+    datosListosParaIngreso = tieneAcceso;
+    if (!boton) return;
+
+    if (!tieneAcceso) {
+      boton.disabled = true;
+      boton.innerHTML = '<i class="fa-solid fa-lock"></i> Sin acceso';
+      setText('homeStatus', 'Tu usuario no posee información asignada o no tiene acceso configurado. Valida tu correo en la hoja usuarios o tus asignaciones en CONT/BTM.');
+      return;
+    }
+
+    boton.disabled = false;
+    boton.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket"></i> Ingresar a Fidu Gestión';
+    setText('homeStatus', 'Información cargada correctamente. Ya puedes ingresar a la herramienta.');
+  }
+
+  function entrarAplicacion() {
+    if (!datosListosParaIngreso) {
+      setText('homeStatus', 'La información aún no está lista o tu usuario no tiene acceso configurado.');
+      return;
+    }
+    mostrarDashboard();
+  }
+
+  function mostrarDashboard() {
+    var home = document.getElementById('homeScreen');
+    var sidebar = document.getElementById('sidebarApp');
+    var app = document.getElementById('appShell');
+    if (home) home.classList.add('hidden');
+    if (sidebar) sidebar.classList.remove('hidden');
+    if (app) app.classList.remove('hidden');
+    setNavActivo_('btnFolderNav');
+  }
+
+  function mostrarHome() {
+    var home = document.getElementById('homeScreen');
+    var sidebar = document.getElementById('sidebarApp');
+    var app = document.getElementById('appShell');
+    if (home) home.classList.remove('hidden');
+    if (sidebar) sidebar.classList.add('hidden');
+    if (app) app.classList.add('hidden');
+    setNavActivo_('btnHomeNav');
+  }
+
+  function setNavActivo_(id) {
+    ['btnHomeNav', 'btnFolderNav'].forEach(function(btnId) {
+      var btn = document.getElementById(btnId);
+      if (btn) btn.classList.toggle('active', btnId === id);
+    });
+  }
+
+  function alternarMenuUsuario() {
+    document.getElementById('userMenu').classList.toggle('hidden');
+  }
+
+  function obtenerNombreUsuario(email) {
+    return (email || 'usuario').split('.')[0];
+  }
+
+  function obtenerIconoEstado(estado) {
+    if (estado === 'Activo') return '🟢';
+    if (estado === 'Inactivo') return '🔴';
+    return '🟡';
+  }
+
+  function normalizarEstado(estado) {
+    return String(estado || '').toLowerCase();
+  }
+
+  function getSelectValue(id, fallback) {
+    var element = document.getElementById(id);
+    return element ? element.value : fallback;
+  }
+
+  function setText(id, value) {
+    var element = document.getElementById(id);
+    if (element) element.textContent = value;
+  }
+</script>

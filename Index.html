@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <?!= include('CSS'); ?>
+  </head>
+  <body>
+    <section id="homeScreen" class="home-screen">
+      <header class="home-nav">
+        <div class="home-brand">BBVA <span>CRM Fiduciaria</span></div>
+      </header>
+      <div class="home-hero">
+        <div class="home-hero-overlay">
+          <h1>CRM Fiduciaria BBVA</h1>
+          <button id="btnEntrarApp" type="button" class="home-entry-btn" onclick="entrarAplicacion()" disabled>
+            <i class="fa-solid fa-circle-notch fa-spin"></i> Cargando información...
+          </button>
+          <div id="homeStatus" class="home-status">Estamos validando tu usuario y conciliando la información.</div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="sidebar hidden" id="sidebarApp" aria-label="Navegación principal">
+      <div class="bbva-mark" aria-label="BBVA Fidu Gestión">Λ</div>
+      <nav class="sidebar-nav">
+        <button id="btnHomeNav" class="sidebar-btn active" type="button" onclick="mostrarHome()" aria-label="Página principal"><i class="fa-solid fa-house"></i></button>
+        <button id="btnFolderNav" class="sidebar-btn" type="button" onclick="mostrarDashboard()" aria-label="Expedientes"><i class="fa-regular fa-folder-open"></i></button>
+        <button class="sidebar-btn" aria-label="Operación"><i class="fa-solid fa-chart-simple"></i></button>
+        <button class="sidebar-btn" aria-label="Prioridades"><i class="fa-solid fa-bars-staggered"></i></button>
+        <button class="sidebar-btn" aria-label="Usuarios"><i class="fa-solid fa-users"></i></button>
+        <button class="sidebar-btn" aria-label="Facturación"><i class="fa-solid fa-building-columns"></i></button>
+        <button class="sidebar-btn" aria-label="Reportes"><i class="fa-regular fa-file-lines"></i></button>
+      </nav>
+      <button class="sidebar-help" aria-label="Ayuda"><i class="fa-regular fa-circle-question"></i></button>
+    </aside>
+
+    <main class="app-shell hidden" id="appShell">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Página principal</span>
+          <h1>Fidu Gestión</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="round-icon" aria-label="Perfil y permisos"><i class="fa-regular fa-user"></i></button>
+          <button class="user-chip avatar-button" id="avatarButton" aria-label="Ver información de usuario"><span id="avatarLetra">U</span></button>
+          <div id="userMenu" class="user-menu hidden">
+            <div class="user-menu-avatar" id="avatarLetraMenu">U</div>
+            <strong id="userMenuName">Usuario</strong>
+            <span id="userMenuEmail">correo@bbva.com</span>
+            <small id="userMenuRole">Rol: -</small>
+          </div>
+        </div>
+      </header>
+
+      <div class="dashboard-layout">
+        <section class="content-column">
+
+
+          <section id="panelAuditoriaAdmin" class="audit-card hidden">
+            <div>
+              <h3><i class="fa-solid fa-shield-halved"></i> Panel de Auditoría Operativa</h3>
+              <p>Inspecciona asignaciones de cualquier usuario digitando su correo institucional.</p>
+            </div>
+            <div class="audit-actions">
+              <input type="email" id="txtBuscarUsuario" placeholder="empleado@bbva.com">
+              <button id="btnAuditarUsuario" class="crm-btn crm-btn-primary"><i class="fa-solid fa-eye"></i> Inspeccionar</button>
+            </div>
+          </section>
+
+
+          <section class="metrics-section" aria-label="Indicadores principales">
+            <h2>Métricas de gestión</h2>
+            <div class="metrics-grid-crm">
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-blue"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+                <div><h4 id="m1">-</h4><p>Contratos Activos</p></div>
+              </article>
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-green"><i class="fa-solid fa-calculator"></i></div>
+                <div><h4 id="m2">-</h4><p>Esquemas Variables</p></div>
+              </article>
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-red"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <div><h4 id="m3">-</h4><p>Discrepancias Base</p></div>
+              </article>
+              <article id="metricFacturacion" class="metric-card-crm hidden">
+                <div class="metric-icon-crm metric-purple"><i class="fa-solid fa-file-circle-check"></i></div>
+                <div><h4 id="m4">-</h4><p>Pendientes periodo actual</p></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="crm-container">
+            <div class="crm-toolbar">
+              <div>
+                <span class="eyebrow">Bandeja operativa</span>
+                <div class="crm-section-title" id="lblBandeja">Bandeja de Control y Trazabilidad</div>
+              </div>
+              <div class="profile-selector-box">
+                <select id="cmbPerfilVista" disabled>
+                  <option>Sincronizando Entorno...</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="loader" class="loading" role="status">
+              <i class="fa-solid fa-circle-notch fa-spin"></i> Conciliando bases de datos en tiempo récord...
+            </div>
+
+            <div id="workspaceExpedientes" class="contracts-grid"></div>
+          </section>
+        </section>
+
+      </div>
+
+      <div id="facturacionActionBar" class="floating-batch-bar-crm hidden">
+        <div class="batch-summary">
+          <div class="batch-counter-badge-crm" id="txtFacturacionCount">0</div>
+          <div>Negocios seleccionados para marcar como facturados en el periodo actual</div>
+        </div>
+        <button id="btnRegistrarFacturacion" class="crm-btn save-batch-btn">
+          <i class="fa-solid fa-file-circle-check"></i> Registrar periodo facturado
+        </button>
+      </div>
+
+      <div id="floatingSaveBar" class="floating-batch-bar-crm hidden">
+        <div class="batch-summary">
+          <div class="batch-counter-badge-crm" id="txtLoteCount">0</div>
+          <div>Modificaciones pendientes en el lote actual</div>
+        </div>
+        <button id="btnGuardarLote" class="crm-btn save-batch-btn">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar y Notificar Cambios
+        </button>
+      </div>
+    </main>
+
+    <?!= include('JS'); ?>
+  </body>
+</html>
