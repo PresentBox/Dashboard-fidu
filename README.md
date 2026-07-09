@@ -55,3 +55,18 @@ La vista de expedientes usa estos campos para armar la estructura inicial de pre
 | Gerente BTM | `CONT/BTM` | W |
 | Profesional BTM | `CONT/BTM` | X |
 | Profesional especializado contable | `CONT/BTM` | G |
+
+## Alertas mensuales de liquidación BTM
+
+El backend incluye `enviarAlertasLiquidacionBTM()` para enviar recordatorios al Gerente BTM y Profesional BTM de contratos activos. El correo incluye el enlace del Dashboard configurado en `CONFIG.DASHBOARD_URL`.
+
+Calendario de alertas:
+
+| Momento | Mensaje |
+| --- | --- |
+| 3 días hábiles antes del día 1 | Ya pueden ir liquidando |
+| 2 días hábiles antes del día 1 | Quedan dos días para cerrar la liquidación |
+| 1 día hábil antes del día 1 | Queda un día para registrar novedades |
+| Día 02 calendario | Cierre de novedades |
+
+Para activarlo en Apps Script, ejecuta una vez `crearTriggerAlertasLiquidacion()` desde el editor. Esto crea un trigger instalable diario a las 8:00 a.m. según la zona horaria del proyecto y solicitará permisos de Spreadsheet, MailApp y Triggers.

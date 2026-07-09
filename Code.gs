@@ -39,7 +39,8 @@ const CONFIG = {
   },
   ESTADOS_PERMITIDOS: ['Activo', 'Inactivo', 'En Liquidación'],
   SIN_ASIGNAR_EMAIL: 'sin_asignar@bbva.com',
-  CURRENT_PERIOD_FORMAT: 'yyyy-MM'
+  CURRENT_PERIOD_FORMAT: 'yyyy-MM',
+  DASHBOARD_URL: 'https://script.google.com/a/macros/bbva.com/s/AKfycbyFsbZtNVXLaKN6Rba2uTPj9k4-1iBiqzlkleUwLQs1ytgS2nETaz_teUz9yQllh6Ey_A/exec'
 };
 
 const ROLES = {
@@ -613,6 +614,198 @@ function escapeHtml_(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+
+/**
+ * Envía alertas mensuales de liquidación BTM según calendario:
+ * - 3, 2 y 1 días hábiles antes del día 1.
+ * - Día 2 calendario como cierre de novedades.
+ * Ejecutar diariamente mediante trigger instalable.
+ * @return {string}
+ */
+function enviarAlertasLiquidacionBTM() {
+  var alerta = getLiquidationAlertForDate_(new Date());
+  if (!alerta) return 'Hoy no aplica alerta de liquidación BTM.';
+
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = getRequiredSheets_(libro);
+  var datosControl = sheets.control.getDataRange().getValues();
+  var datosBTM = sheets.btm.getDataRange().getValues();
+  var asignaciones = buildBtmAssignmentsMap_(datosBTM);
+  var grupos = buildLiquidationReminderGroups_(datosControl, asignaciones);
+  var emails = Object.keys(grupos);
+
+  emails.forEach(function(email) {
+    var body = buildLiquidationReminderBody_(alerta, grupos[email]);
+    var html = buildLiquidationReminderHtml_(alerta, grupos[email]);
+    MailApp.sendEmail({
+      to: email,
+      subject: alerta.subject,
+      body: body,
+      htmlBody: html
+    });
+  });
+
+  return 'Se enviaron ' + emails.length + ' alertas de liquidación BTM.';
+}
+
+/**
+ * Crea un trigger diario para enviar alertas de liquidación.
+ * Ejecutar una sola vez desde Apps Script para instalarlo y autorizar permisos.
+ * @return {string}
+ */
+function crearTriggerAlertasLiquidacion() {
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === 'enviarAlertasLiquidacionBTM') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  ScriptApp.newTrigger('enviarAlertasLiquidacionBTM')
+    .timeBased()
+    .everyDays(1)
+    .atHour(8)
+    .create();
+
+  return 'Trigger diario de alertas de liquidación creado para las 8:00 a.m. según zona horaria del script.';
+}
+
+function buildLiquidationReminderGroups_(datosControl, asignaciones) {
+  var grupos = {};
+
+  for (var row = 1; row < datosControl.length; row++) {
+    var radicacion = toCleanString_(datosControl[row][CONFIG.CONTROL_COLS.RADICACION]);
+    var radKey = normalizeKey_(radicacion);
+    if (!radKey || isHeaderLike_(radKey)) continue;
+
+    var estado = toCleanString_(datosControl[row][CONFIG.CONTROL_COLS.ESTADO]) || 'Activo';
+    if (estado.toLowerCase() !== 'activo') continue;
+
+    var asignacion = asignaciones[radKey] || buildEmptyAssignment_();
+    var destinatarios = [asignacion.gerente, asignacion.profesionalBtm].filter(function(email, index, array) {
+      return email && email.indexOf('@') !== -1 && array.indexOf(email) === index;
+    });
+
+    destinatarios.forEach(function(email) {
+      if (!grupos[email]) grupos[email] = [];
+      grupos[email].push({
+        radicacion: radicacion,
+        codigoFidusap: toCleanString_(datosControl[row][CONFIG.CONTROL_COLS.CODIGO_FIDUSAP]) || 'Sin código',
+        nombre: toCleanString_(datosControl[row][CONFIG.CONTROL_COLS.NOMBRE_NEGOCIO]) || asignacion.nombreBTM,
+        esquema: interpretarTextoComision(datosControl[row][CONFIG.CONTROL_COLS.COMISION])
+      });
+    });
+  }
+
+  return grupos;
+}
+
+function getLiquidationAlertForDate_(date) {
+  var todayKey = formatDateKey_(date);
+  var targetFirst = new Date(date.getFullYear(), date.getMonth(), 1);
+  if (date.getDate() > 2) targetFirst = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+
+  var alerts = [
+    {
+      date: addBusinessDays_(targetFirst, -3),
+      subject: '⏰ Puedes iniciar la liquidación de contratos BTM',
+      title: 'Ya puedes ir liquidando',
+      message: 'Faltan 3 días hábiles para dejar la liquidación lista a más tardar el día 1.'
+    },
+    {
+      date: addBusinessDays_(targetFirst, -2),
+      subject: '⚠️ Quedan 2 días para cerrar la liquidación BTM',
+      title: 'Quedan 2 días para el cierre',
+      message: 'Quedan 2 días hábiles para cerrar la liquidación del periodo de facturación.'
+    },
+    {
+      date: addBusinessDays_(targetFirst, -1),
+      subject: '🚨 Queda 1 día para registrar novedades de liquidación',
+      title: 'Queda 1 día para registrar novedades',
+      message: 'Mañana vence el plazo para dejar la liquidación lista y registrar novedades.'
+    },
+    {
+      date: new Date(targetFirst.getFullYear(), targetFirst.getMonth(), 2),
+      subject: '🔒 Cierre de novedades de liquidación BTM',
+      title: 'Cierre de novedades',
+      message: 'Hoy 02 de mes calendario se realiza el cierre de novedades de liquidación.'
+    }
+  ];
+
+  for (var i = 0; i < alerts.length; i++) {
+    if (formatDateKey_(alerts[i].date) === todayKey) return alerts[i];
+  }
+  return null;
+}
+
+function buildLiquidationReminderBody_(alerta, contratos) {
+  var lines = [
+    alerta.title,
+    '',
+    alerta.message,
+    '',
+    'Contratos activos asociados: ' + contratos.length,
+    '',
+    'Ingresa al Dashboard: ' + CONFIG.DASHBOARD_URL,
+    ''
+  ];
+
+  contratos.slice(0, 30).forEach(function(item) {
+    lines.push('• Radicación: ' + item.radicacion + ' | Código FIDUSAP: ' + item.codigoFidusap + ' | Negocio: ' + item.nombre + ' | Esquema: ' + item.esquema);
+  });
+
+  return lines.join('\n');
+}
+
+function buildLiquidationReminderHtml_(alerta, contratos) {
+  var rows = contratos.slice(0, 30).map(function(item) {
+    return '<tr>' +
+      '<td style="padding:12px;border-bottom:1px solid #edf0f4;color:#001391;font-weight:700;">' + escapeHtml_(item.radicacion) + '</td>' +
+      '<td style="padding:12px;border-bottom:1px solid #edf0f4;color:#020b5f;">' + escapeHtml_(item.codigoFidusap) + '</td>' +
+      '<td style="padding:12px;border-bottom:1px solid #edf0f4;color:#020b5f;">' + escapeHtml_(item.nombre) + '</td>' +
+      '<td style="padding:12px;border-bottom:1px solid #edf0f4;color:#020b5f;">' + escapeHtml_(item.esquema) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  return '<div style="background:#f3f4f6;padding:28px;font-family:Segoe UI,Arial,sans-serif;color:#020b5f;">' +
+    '<div style="max-width:760px;margin:0 auto;background:#ffffff;border-radius:22px;overflow:hidden;box-shadow:0 18px 45px rgba(4,17,90,0.08);">' +
+      '<div style="background:#001391;color:#fff;padding:28px 32px;">' +
+        '<div style="font-size:36px;font-weight:900;margin-bottom:12px;">BBVA</div>' +
+        '<h1 style="margin:0;font-size:24px;">' + escapeHtml_(alerta.title) + '</h1>' +
+        '<p style="margin:10px 0 0;color:#d8ecff;">CRM Fiduciaria BBVA · Recordatorio de liquidación</p>' +
+      '</div>' +
+      '<div style="padding:28px 32px;">' +
+        '<p style="font-size:16px;line-height:1.55;margin:0 0 18px;">' + escapeHtml_(alerta.message) + '</p>' +
+        '<div style="background:#d8ecff;border-radius:16px;padding:16px 18px;margin-bottom:22px;"><strong>Contratos activos asociados:</strong> ' + contratos.length + '</div>' +
+        '<table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #edf0f4;border-radius:14px;overflow:hidden;">' +
+          '<thead><tr style="background:#f7f8fa;text-align:left;">' +
+            '<th style="padding:12px;color:#5d668a;font-size:12px;text-transform:uppercase;">Radicación</th>' +
+            '<th style="padding:12px;color:#5d668a;font-size:12px;text-transform:uppercase;">FIDUSAP</th>' +
+            '<th style="padding:12px;color:#5d668a;font-size:12px;text-transform:uppercase;">Negocio</th>' +
+            '<th style="padding:12px;color:#5d668a;font-size:12px;text-transform:uppercase;">Esquema</th>' +
+          '</tr></thead><tbody>' + rows + '</tbody>' +
+        '</table>' +
+        '<div style="margin-top:26px;"><a href="' + CONFIG.DASHBOARD_URL + '" style="display:inline-block;background:#001391;color:#ffffff;text-decoration:none;border-radius:12px;padding:14px 22px;font-weight:800;">Ingresar al Dashboard</a></div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function addBusinessDays_(date, days) {
+  var result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  var step = days < 0 ? -1 : 1;
+  var remaining = Math.abs(days);
+  while (remaining > 0) {
+    result.setDate(result.getDate() + step);
+    var day = result.getDay();
+    if (day !== 0 && day !== 6) remaining--;
+  }
+  return result;
+}
+
+function formatDateKey_(date) {
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
 function normalizeProfileName_(profile) {

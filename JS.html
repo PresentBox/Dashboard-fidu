@@ -117,12 +117,14 @@
     var contenedor = document.getElementById('workspaceExpedientes');
     var fragment = document.createDocumentFragment();
     var contadorProcesados = 0;
+    var contratosVisibles = [];
 
     contenedor.innerHTML = '';
     document.getElementById('loader').style.display = 'none';
 
     lista.forEach(function(item) {
       if (!debeMostrarContrato(item, vista, filterComision)) return;
+      contratosVisibles.push(item);
       try {
         contadorProcesados++;
         fragment.appendChild(crearTarjetaContrato(item));
@@ -131,12 +133,29 @@
       }
     });
 
+    actualizarMetricasVista(contratosVisibles);
+
     if (contadorProcesados === 0) {
       contenedor.innerHTML = '<div class="loading">No se encontraron registros contractuales para la vista actual.</div>';
       return;
     }
 
     contenedor.appendChild(fragment);
+  }
+
+  function actualizarMetricasVista(contratos) {
+    var metricas = contratos.reduce(function(acc, item) {
+      if (normalizarEstado(item.estadoActual) === 'activo') acc.totalActivos++;
+      if (item.esquemaComision === 'Variable') acc.totalVariables++;
+      if (item.validacionSFC !== 'OK') acc.discrepancias++;
+      if (cacheDatos.esFacturacion && normalizarEstado(item.estadoActual) === 'activo' && !item.facturadoPeriodoActual) acc.pendientesFacturacionPeriodo++;
+      return acc;
+    }, { totalActivos: 0, totalVariables: 0, discrepancias: 0, pendientesFacturacionPeriodo: 0 });
+
+    setText('m1', metricas.totalActivos);
+    setText('m2', metricas.totalVariables);
+    setText('m3', metricas.discrepancias);
+    setText('m4', metricas.pendientesFacturacionPeriodo);
   }
 
   function debeMostrarContrato(item, vista, filterComision) {
