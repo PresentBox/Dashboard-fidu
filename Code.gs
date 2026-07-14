@@ -8,7 +8,8 @@ const CONFIG = {
     BTM: 'CONT/BTM',
     SFC: 'INV SFC',
     USUARIOS: 'usuarios',
-    FACTURACION: 'facturacion'
+    FACTURACION: 'facturacion',
+    LIQUIDACIONES: 'liquidaciones'
   },
   // Fallback de emergencia para no perder acceso si la hoja `usuarios` aún no existe.
   BOOTSTRAP_SUPER_ADMINS: [
@@ -100,8 +101,9 @@ function obtenerEcosistemaLiquidaciones() {
   var mapaAsignacionesBTM = buildBtmAssignmentsMap_(datosBTM);
 
   var facturadosPeriodoActual = buildCurrentPeriodBillingMap_(libro);
+  var liquidacionesPeriodoActual = buildCurrentPeriodLiquidationMap_(libro);
 
-  return buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesAdicionales, datosControl, mapaAsignacionesBTM, mapaEstadosSFC, facturadosPeriodoActual);
+  return buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesAdicionales, datosControl, mapaAsignacionesBTM, mapaEstadosSFC, facturadosPeriodoActual, liquidacionesPeriodoActual);
 }
 
 /**
@@ -220,7 +222,7 @@ function buildBtmAssignmentsMap_(datosBTM) {
   return mapaAsignacionesBTM;
 }
 
-function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesAdicionales, datosControl, mapaAsignacionesBTM, mapaEstadosSFC, facturadosPeriodoActual) {
+function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesAdicionales, datosControl, mapaAsignacionesBTM, mapaEstadosSFC, facturadosPeriodoActual, liquidacionesPeriodoActual) {
   var contratosProcesados = [];
   var rolesDetectados = new Set();
   var metricas = { totalActivos: 0, totalVariables: 0, discrepancias: 0, pendientesFacturacionPeriodo: 0 };
@@ -243,6 +245,7 @@ function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesA
 
     var estaActivo = estadoControl.toLowerCase() === 'activo';
     var facturadoPeriodoActual = Boolean(facturadosPeriodoActual[radicacionKey]);
+    var liquidacionCerradaPeriodoActual = Boolean(liquidacionesPeriodoActual[radicacionKey]);
     if (esFacturacion && estaActivo && !facturadoPeriodoActual) metricas.pendientesFacturacionPeriodo++;
 
     if (rolesEnFila.length > 0 || esSuperAdmin || esFacturacion) {
@@ -267,6 +270,7 @@ function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesA
         validacionSFC: estadoValidacion,
         estadoActual: estadoControl,
         facturadoPeriodoActual: facturadoPeriodoActual,
+        liquidacionCerradaPeriodoActual: liquidacionCerradaPeriodoActual,
         asignados: {
           ProfesionalContable: asignados.profesionalContable,
           Contador: asignados.profesionalContable,
@@ -471,6 +475,85 @@ function buildCurrentPeriodBillingMap_(book) {
   return map;
 }
 
+
+function buildCurrentPeriodLiquidationMap_(book) {
+  var sheet = book.getSheetByName(CONFIG.SHEETS.LIQUIDACIONES);
+  var map = {};
+  if (!sheet || sheet.getLastRow() <= 1) return map;
+
+  var currentPeriod = getCurrentBillingPeriod_();
+  var values = sheet.getDataRange().getValues();
+  for (var row = 1; row < values.length; row++) {
+    var period = toCleanString_(values[row][1]);
+    var radicacion = normalizeKey_(values[row][2]);
+    if (period === currentPeriod && radicacion) map[radicacion] = true;
+  }
+  return map;
+}
+
+function registrarCierreLiquidacionMensual(radicaciones) {
+  var book = SpreadsheetApp.getActiveSpreadsheet();
+  var email = getCurrentUserEmail_();
+  if (!Array.isArray(radicaciones)) radicaciones = [radicaciones];
+  if (radicaciones.length === 0) throw new Error('Selecciona al menos un contrato para cerrar liquidación.');
+
+  var sheets = getRequiredSheets_(book);
+  var datosControl = sheets.control.getDataRange().getValues();
+  var datosBTM = sheets.btm.getDataRange().getValues();
+  var asignaciones = buildBtmAssignmentsMap_(datosBTM);
+  var perfiles = getAdditionalProfiles_(book, email);
+  var esAdmin = isSuperAdmin_(email, perfiles);
+  var liquidacionesPeriodo = buildCurrentPeriodLiquidationMap_(book);
+  var sheetLiquidaciones = getOrCreateLiquidationSheet_(book);
+  var period = getCurrentBillingPeriod_();
+  var now = new Date();
+  var rows = [];
+  var controlPorRadicacion = buildControlRowsMap_(datosControl);
+
+  radicaciones.forEach(function(radicacion) {
+    var clean = toCleanString_(radicacion);
+    var key = normalizeKey_(clean);
+    if (!clean || liquidacionesPeriodo[key]) return;
+
+    var row = controlPorRadicacion[key];
+    if (!row) throw new Error('No se encontró la radicación ' + clean + ' en control.');
+
+    var esquema = interpretarTextoComision(row[CONFIG.CONTROL_COLS.COMISION]);
+    if (esquema !== 'Variable') throw new Error('La radicación ' + clean + ' no es de esquema variable.');
+
+    var asignacion = asignaciones[key] || buildEmptyAssignment_();
+    var puedeCerrar = esAdmin || email === asignacion.gerente || email === asignacion.profesionalBtm;
+    if (!puedeCerrar) throw new Error('No tienes permiso para cerrar liquidación de la radicación ' + clean + '.');
+
+    rows.push([now, period, clean, email, 'Liquidación cerrada', esquema]);
+  });
+
+  if (rows.length > 0) {
+    sheetLiquidaciones.getRange(sheetLiquidaciones.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  }
+
+  return '✅ Se cerró la liquidación mensual de ' + rows.length + ' contrato(s) para el periodo ' + period + '.';
+}
+
+function getOrCreateLiquidationSheet_(book) {
+  var sheet = book.getSheetByName(CONFIG.SHEETS.LIQUIDACIONES);
+  if (!sheet) {
+    sheet = book.insertSheet(CONFIG.SHEETS.LIQUIDACIONES);
+    sheet.getRange(1, 1, 1, 6).setValues([['fecha_registro', 'periodo', 'radicacion', 'usuario', 'estado_liquidacion', 'esquema']]);
+  }
+  return sheet;
+}
+
+function buildControlRowsMap_(datosControl) {
+  var map = {};
+  for (var row = 1; row < datosControl.length; row++) {
+    var radicacion = normalizeKey_(datosControl[row][CONFIG.CONTROL_COLS.RADICACION]);
+    if (!radicacion || isHeaderLike_(radicacion)) continue;
+    map[radicacion] = datosControl[row];
+  }
+  return map;
+}
+
 function registrarFacturacionPeriodo(radicaciones) {
   var book = SpreadsheetApp.getActiveSpreadsheet();
   var email = getCurrentUserEmail_();
@@ -633,7 +716,8 @@ function enviarAlertasLiquidacionBTM() {
   var datosControl = sheets.control.getDataRange().getValues();
   var datosBTM = sheets.btm.getDataRange().getValues();
   var asignaciones = buildBtmAssignmentsMap_(datosBTM);
-  var grupos = buildLiquidationReminderGroups_(datosControl, asignaciones);
+  var liquidacionesPeriodoActual = buildCurrentPeriodLiquidationMap_(libro);
+  var grupos = buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual);
   var emails = Object.keys(grupos);
 
   emails.forEach(function(email) {
@@ -671,7 +755,7 @@ function crearTriggerAlertasLiquidacion() {
   return 'Trigger diario de alertas de liquidación creado para las 8:00 a.m. según zona horaria del script.';
 }
 
-function buildLiquidationReminderGroups_(datosControl, asignaciones) {
+function buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual) {
   var grupos = {};
 
   for (var row = 1; row < datosControl.length; row++) {
@@ -681,6 +765,10 @@ function buildLiquidationReminderGroups_(datosControl, asignaciones) {
 
     var estado = toCleanString_(datosControl[row][CONFIG.CONTROL_COLS.ESTADO]) || 'Activo';
     if (estado.toLowerCase() !== 'activo') continue;
+    if (liquidacionesPeriodoActual[radKey]) continue;
+
+    var esquema = interpretarTextoComision(datosControl[row][CONFIG.CONTROL_COLS.COMISION]);
+    if (esquema !== 'Variable') continue;
 
     var asignacion = asignaciones[radKey] || buildEmptyAssignment_();
     var destinatarios = [asignacion.gerente, asignacion.profesionalBtm].filter(function(email, index, array) {
@@ -693,7 +781,7 @@ function buildLiquidationReminderGroups_(datosControl, asignaciones) {
         radicacion: radicacion,
         codigoFidusap: toCleanString_(datosControl[row][CONFIG.CONTROL_COLS.CODIGO_FIDUSAP]) || 'Sin código',
         nombre: toCleanString_(datosControl[row][CONFIG.CONTROL_COLS.NOMBRE_NEGOCIO]) || asignacion.nombreBTM,
-        esquema: interpretarTextoComision(datosControl[row][CONFIG.CONTROL_COLS.COMISION])
+        esquema: esquema
       });
     });
   }

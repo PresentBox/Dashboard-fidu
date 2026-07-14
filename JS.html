@@ -362,9 +362,15 @@
     zona.className = 'action-zone';
 
     if (item.esquemaComision === 'Variable') {
-      zona.appendChild(crearInputMonto(item.radicacion));
-      zona.appendChild(document.createTextNode(' '));
-      zona.appendChild(crearBotonLiquidar(item.radicacion));
+      if (item.liquidacionCerradaPeriodoActual) {
+        zona.innerHTML = '<span style="color:#137333; font-size:12px; font-weight:800;"><i class="fa-solid fa-circle-check"></i> Liquidación del mes cerrada</span>';
+      } else {
+        zona.appendChild(crearInputMonto(item.radicacion));
+        zona.appendChild(document.createTextNode(' '));
+        zona.appendChild(crearBotonLiquidar(item.radicacion));
+        zona.appendChild(document.createTextNode(' '));
+        zona.appendChild(crearBotonCerrarLiquidacion(item.radicacion));
+      }
     } else {
       zona.innerHTML = '<span style="color:#137333; font-size:12px; font-weight:600;"><i class="fa-solid fa-circle-check"></i> Tarifa Fija Automatizada</span>';
     }
@@ -388,6 +394,15 @@
     button.className = 'crm-btn crm-btn-primary';
     button.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar';
     button.onclick = function() { enviarLiquidacionBTM(radicacion); };
+    return button;
+  }
+
+
+  function crearBotonCerrarLiquidacion(radicacion) {
+    var button = document.createElement('button');
+    button.className = 'crm-btn close-liquidation-btn';
+    button.innerHTML = '<i class="fa-solid fa-calendar-check"></i> Cerrar liquidación mes';
+    button.onclick = function() { cerrarLiquidacionMensual(radicacion); };
     return button;
   }
 
@@ -471,6 +486,17 @@
     botonGuardar.disabled = false;
     barra.style.pointerEvents = 'auto';
     barra.style.opacity = '1';
+  }
+
+
+  function cerrarLiquidacionMensual(radicacion) {
+    google.script.run
+      .withSuccessHandler(function(respuesta) {
+        alert(respuesta);
+        cargarEcosistemaCRM();
+      })
+      .withFailureHandler(function(err) { alert('Error al cerrar liquidación: ' + err.message); })
+      .registrarCierreLiquidacionMensual([radicacion]);
   }
 
   function enviarLiquidacionBTM(radicacion) {

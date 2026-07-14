@@ -70,3 +70,20 @@ Calendario de alertas:
 | Día 02 calendario | Cierre de novedades |
 
 Para activarlo en Apps Script, ejecuta una vez `crearTriggerAlertasLiquidacion()` desde el editor. Esto crea un trigger instalable diario a las 8:00 a.m. según la zona horaria del proyecto y solicitará permisos de Spreadsheet, MailApp y Triggers.
+
+## Cierre mensual de liquidación variable
+
+La vista de contratos permite cerrar la liquidación mensual de contratos con esquema `Variable`. El cierre se registra en la hoja `liquidaciones`, separada de `facturacion`, para que el mismo contrato vuelva a quedar pendiente al iniciar un nuevo periodo `yyyy-MM`.
+
+Columnas creadas automáticamente en `liquidaciones`:
+
+| Columna | Campo |
+| --- | --- |
+| A | fecha_registro |
+| B | periodo |
+| C | radicacion |
+| D | usuario |
+| E | estado_liquidacion |
+| F | esquema |
+
+Las alertas mensuales BTM solo incluyen contratos activos, variables y que no tengan cierre de liquidación en el periodo actual.
