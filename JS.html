@@ -64,6 +64,11 @@
     if (folderNav) folderNav.onclick = mostrarDashboard;
   }
 
+
+  function estaEnVistaFacturacion() {
+    return Boolean(cacheDatos && cacheDatos.esFacturacion && getSelectValue('cmbPerfilVista', '') === 'FACTURACION');
+  }
+
   function configurarPerfil(respuesta) {
     var selector = document.getElementById('cmbPerfilVista');
 
@@ -193,7 +198,7 @@
     detalle.appendChild(crearBloqueDatosOperacion(item));
     detalle.appendChild(crearMetaBox(item));
     detalle.appendChild(crearBloquePreLiquidacion(item));
-    if (cacheDatos.esFacturacion && getSelectValue('cmbPerfilVista', '') === 'FACTURACION') {
+    if (estaEnVistaFacturacion()) {
       detalle.appendChild(crearSelectorFacturacion(item));
     }
     detalle.appendChild(crearFilaAcciones(item));
@@ -284,7 +289,7 @@
 
     wrapper.appendChild(title);
     wrapper.appendChild(historico);
-    if (!cacheDatos.esFacturacion) wrapper.appendChild(form);
+    if (!estaEnVistaFacturacion()) wrapper.appendChild(form);
     return wrapper;
   }
 
@@ -303,7 +308,7 @@
       row.innerHTML = '<strong></strong><span></span>';
       row.querySelector('strong').textContent = pre.tipoComision + ' · ' + (pre.estado || 'PRELIQUIDADA');
       row.querySelector('span').textContent = 'Total: ' + formatoMoneda(pre.total) + (pre.facturaFidusap ? ' · Factura: ' + pre.facturaFidusap : '');
-      if (cacheDatos.esFacturacion && pre.estado !== 'FACTURADA') {
+      if (estaEnVistaFacturacion() && pre.estado !== 'FACTURADA') {
         row.appendChild(crearBotonConfirmarFactura(pre.id));
       }
       resumen.appendChild(row);
@@ -364,13 +369,17 @@
     var boton = document.createElement('button');
     boton.className = 'crm-btn crm-btn-primary';
     boton.type = 'button';
-    boton.innerHTML = '<i class="fa-solid fa-calculator"></i> Generar preliquidación';
+    boton.innerHTML = '<i class="fa-solid fa-calculator"></i> Generar y cerrar preliquidación';
     boton.onclick = function() { generarPreliquidacion(item.radicacion, select.value, fields, boton); };
     select.onchange = renderFields;
 
     form.appendChild(select);
     form.appendChild(fields);
     form.appendChild(totalPreview);
+    var ayuda = document.createElement('div');
+    ayuda.className = 'preliq-help';
+    ayuda.textContent = 'Puedes generar una preliquidación por cada tipo de comisión aplicable al periodo. Los campos no aplicables quedan ocultos según la Tabla de comisiones.';
+    form.appendChild(ayuda);
     form.appendChild(boton);
     return form;
   }
@@ -389,7 +398,7 @@
     select.className = 'select-estado-sfc';
     select.dataset.radicacion = item.radicacion;
     select.dataset.estadoOriginal = item.estadoActual;
-    if (cacheDatos.esFacturacion && getSelectValue('cmbPerfilVista', '') === 'FACTURACION') {
+    if (estaEnVistaFacturacion()) {
       select.disabled = true;
       select.title = 'Facturación solo visualiza estados y registra periodos facturados.';
     } else {
@@ -409,24 +418,18 @@
 
   function crearMetaBox(item) {
     var meta = document.createElement('div');
-    meta.className = 'info-meta-box';
+    meta.className = 'info-meta-box commission-description-box';
 
-    var nit = document.createElement('div');
-    nit.innerHTML = '<strong>Nombre del Negocio (Col G Control):</strong> ';
-    var nitValue = document.createElement('span');
-    nitValue.style.fontWeight = '600';
-    nitValue.style.color = '#1a73e8';
-    nitValue.textContent = item.nitNombreControl;
-    nit.appendChild(nitValue);
+    var descripcion = document.createElement('div');
+    descripcion.innerHTML = '<strong>Descripción de la comisión:</strong> ';
+    descripcion.appendChild(document.createTextNode(item.descripcionComisiones || item.textoComisionOriginal || 'No especificada'));
 
-    var parametro = document.createElement('div');
-    parametro.innerHTML = '<strong>Parámetro Col J:</strong> ';
-    parametro.appendChild(document.createTextNode(item.textoComisionOriginal + ' | '));
-    parametro.insertAdjacentHTML('beforeend', '<strong>Profesional contable:</strong> ');
-    parametro.appendChild(document.createTextNode(item.asignados.ProfesionalContable || item.asignados.Contador || 'Sin asignar'));
+    var contador = document.createElement('div');
+    contador.innerHTML = '<strong>Profesional contable:</strong> ';
+    contador.appendChild(document.createTextNode(item.asignados.ProfesionalContable || item.asignados.Contador || 'Sin asignar'));
 
-    meta.appendChild(nit);
-    meta.appendChild(parametro);
+    meta.appendChild(descripcion);
+    meta.appendChild(contador);
     return meta;
   }
 
@@ -453,26 +456,17 @@
 
   function crearFilaAcciones(item) {
     var fila = document.createElement('div');
-    fila.className = 'crm-card-row';
+    fila.className = 'crm-card-row preliq-footer-row';
     fila.style.justifyContent = 'flex-end';
     fila.style.paddingTop = '5px';
     fila.style.borderTop = '1px dashed #e1e4e8';
 
     var zona = document.createElement('div');
     zona.className = 'action-zone';
-
-    if (item.esquemaComision === 'Variable') {
-      if (item.preliquidadoPeriodoActual || item.liquidacionCerradaPeriodoActual) {
-        zona.innerHTML = '<span style="color:#137333; font-size:12px; font-weight:800;"><i class="fa-solid fa-circle-check"></i> Preliquidación del mes registrada</span>';
-      } else {
-        zona.appendChild(crearInputMonto(item.radicacion));
-        zona.appendChild(document.createTextNode(' '));
-        zona.appendChild(crearBotonLiquidar(item.radicacion));
-        zona.appendChild(document.createTextNode(' '));
-        zona.appendChild(crearBotonCerrarLiquidacion(item.radicacion));
-      }
+    if (item.preliquidadoPeriodoActual || item.liquidacionCerradaPeriodoActual) {
+      zona.innerHTML = '<span style="color:#137333; font-size:12px; font-weight:800;"><i class="fa-solid fa-circle-check"></i> Estado: preliquidado para el periodo</span>';
     } else {
-      zona.innerHTML = '<span style="color:#137333; font-size:12px; font-weight:600;"><i class="fa-solid fa-circle-check"></i> Tarifa Fija Automatizada</span>';
+      zona.innerHTML = '<span style="color:#5d668a; font-size:12px; font-weight:700;"><i class="fa-solid fa-circle-info"></i> Selecciona un tipo de comisión y genera la preliquidación desde el bloque superior.</span>';
     }
 
     fila.appendChild(zona);

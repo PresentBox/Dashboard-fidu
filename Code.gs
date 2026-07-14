@@ -698,8 +698,18 @@ function buildCurrentPeriodPreliquidationMap_(book) {
   return map;
 }
 
+
+function getSheetByNameInsensitive_(book, name) {
+  var target = normalizaTexto_(name);
+  var sheets = book.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (normalizaTexto_(sheets[i].getName()) === target) return sheets[i];
+  }
+  return null;
+}
+
 function getCommissionTypes_(book) {
-  var sheet = book.getSheetByName(CONFIG.SHEETS.TABLA_COMISIONES);
+  var sheet = book.getSheetByName(CONFIG.SHEETS.TABLA_COMISIONES) || getSheetByNameInsensitive_(book, CONFIG.SHEETS.TABLA_COMISIONES);
   if (!sheet || sheet.getLastRow() < 4) return [];
   var smmlv = Number(sheet.getRange('B1').getValue()) || Number(sheet.getRange('A2').getValue()) || 0;
   var lastRow = sheet.getLastRow();
