@@ -87,3 +87,21 @@ Columnas creadas automáticamente en `liquidaciones`:
 | F | esquema |
 
 Las alertas mensuales BTM solo incluyen contratos activos, variables y que no tengan cierre de liquidación en el periodo actual.
+
+## Simulación y prueba de correos
+
+Para validar alertas sin enviar correos reales, ejecuta desde Apps Script:
+
+```js
+simularAlertasLiquidacionBTM('2026-07-29')
+```
+
+La función devuelve si esa fecha dispararía correo, destinatarios calculados y contratos de muestra, pero no envía nada.
+
+Para probar el diseño del correo y el envío real a un buzón controlado, ejecuta:
+
+```js
+enviarCorreoPruebaLiquidacionBTM('tu.correo@bbva.com')
+```
+
+Esta prueba no depende de que la fecha actual sea una fecha del calendario de alertas. Si no encuentra contratos variables pendientes, envía un contrato visual de prueba.

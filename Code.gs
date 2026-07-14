@@ -700,6 +700,89 @@ function escapeHtml_(value) {
 }
 
 
+
+/**
+ * Simula la alerta de liquidación sin enviar correos.
+ * @param {string=} fechaISO Fecha opcional en formato yyyy-MM-dd para probar días específicos.
+ * @return {Object}
+ */
+function simularAlertasLiquidacionBTM(fechaISO) {
+  var fecha = fechaISO ? new Date(fechaISO + 'T12:00:00') : new Date();
+  var alerta = getLiquidationAlertForDate_(fecha);
+  if (!alerta) {
+    return {
+      enviaCorreo: false,
+      fechaEvaluada: formatDateKey_(fecha),
+      mensaje: 'La fecha evaluada no coincide con el calendario de alertas.'
+    };
+  }
+
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = getRequiredSheets_(libro);
+  var datosControl = sheets.control.getDataRange().getValues();
+  var datosBTM = sheets.btm.getDataRange().getValues();
+  var asignaciones = buildBtmAssignmentsMap_(datosBTM);
+  var liquidacionesPeriodoActual = buildCurrentPeriodLiquidationMap_(libro);
+  var grupos = buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual);
+  var emails = Object.keys(grupos);
+
+  return {
+    enviaCorreo: emails.length > 0,
+    fechaEvaluada: formatDateKey_(fecha),
+    asunto: alerta.subject,
+    destinatarios: emails,
+    totalDestinatarios: emails.length,
+    totalContratos: emails.reduce(function(total, email) { return total + grupos[email].length; }, 0),
+    muestraPrimerDestinatario: emails.length ? grupos[emails[0]].slice(0, 5) : []
+  };
+}
+
+/**
+ * Envía un correo de prueba de alerta de liquidación al correo indicado o al usuario activo.
+ * No depende de que hoy sea fecha de alerta.
+ * @param {string=} emailDestino Correo destino opcional.
+ * @return {string}
+ */
+function enviarCorreoPruebaLiquidacionBTM(emailDestino) {
+  var destino = normalizeEmail_(emailDestino || getCurrentUserEmail_());
+  if (!destino || destino.indexOf('@') === -1) throw new Error('Indica un correo válido para la prueba.');
+
+  var alerta = {
+    subject: '🧪 Prueba alerta de liquidación BTM',
+    title: 'Prueba de alerta de liquidación',
+    message: 'Este es un correo de prueba para validar el formato, destinatario y enlace al Dashboard. No corresponde a una alerta productiva.'
+  };
+
+  var contratos = getSampleLiquidationContracts_();
+  MailApp.sendEmail({
+    to: destino,
+    subject: alerta.subject,
+    body: buildLiquidationReminderBody_(alerta, contratos),
+    htmlBody: buildLiquidationReminderHtml_(alerta, contratos)
+  });
+
+  return 'Correo de prueba enviado a ' + destino + ' con ' + contratos.length + ' contrato(s) de muestra.';
+}
+
+function getSampleLiquidationContracts_() {
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = getRequiredSheets_(libro);
+  var datosControl = sheets.control.getDataRange().getValues();
+  var datosBTM = sheets.btm.getDataRange().getValues();
+  var asignaciones = buildBtmAssignmentsMap_(datosBTM);
+  var liquidacionesPeriodoActual = buildCurrentPeriodLiquidationMap_(libro);
+  var grupos = buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual);
+  var emails = Object.keys(grupos);
+  if (emails.length) return grupos[emails[0]].slice(0, 5);
+
+  return [{
+    radicacion: 'PRUEBA-001',
+    codigoFidusap: 'FIDU-TEST',
+    nombre: 'Contrato de prueba visual',
+    esquema: 'Variable'
+  }];
+}
+
 /**
  * Envía alertas mensuales de liquidación BTM según calendario:
  * - 3, 2 y 1 días hábiles antes del día 1.
