@@ -727,7 +727,9 @@ function probarCorreoLiquidacionBTM() {
  * @return {Object}
  */
 function probarCalendarioAlertasLiquidacion() {
-  return simularCalendarioAlertasLiquidacion();
+  var resultado = simularCalendarioAlertasLiquidacion();
+  Logger.log(JSON.stringify(resultado, null, 2));
+  return resultado;
 }
 
 function probarCorreoLiquidacion3Dias() {

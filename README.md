@@ -94,6 +94,8 @@ Para revisar el calendario antes de activar el trigger, ejecuta desde Apps Scrip
 probarCalendarioAlertasLiquidacion()
 ```
 
+El resultado queda impreso en el **Registro de ejecución** mediante `Logger.log`. Si solo ves `Ejecución iniciada` y `Ejecución finalizada`, despliega/actualiza el panel de registros o abre la ejecución desde el historial de ejecuciones para ver el JSON con `mesEvaluado`, `fechaCierre` y `alertas`.
+
 Para probar cada correo por separado sin activar el envío masivo, cambia `CONFIG.TEST_EMAIL` y ejecuta uno de estos wrappers:
 
 ```js
