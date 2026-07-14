@@ -67,7 +67,7 @@ Calendario de alertas:
 | 3 días hábiles antes del día 1 | Ya pueden ir liquidando |
 | 2 días hábiles antes del día 1 | Quedan dos días para cerrar la liquidación |
 | 1 día hábil antes del día 1 | Queda un día para registrar novedades |
-| Día 02 calendario | Cierre de novedades |
+| Día 1 calendario | Cierre de novedades / periodo finalizado |
 
 Para activarlo en Apps Script, ejecuta una vez `crearTriggerAlertasLiquidacion()` desde el editor. Esto crea un trigger instalable diario a las 8:00 a.m. según la zona horaria del proyecto y solicitará permisos de Spreadsheet, MailApp y Triggers.
 
@@ -86,7 +86,22 @@ Columnas creadas automáticamente en `liquidaciones`:
 | E | estado_liquidacion |
 | F | esquema |
 
-Las alertas mensuales BTM solo incluyen contratos activos, variables y que no tengan cierre de liquidación en el periodo actual.
+Las alertas mensuales BTM solo incluyen contratos activos, variables y que no tengan cierre de liquidación en el periodo actual. Todos los correos incluyen la tabla/listado de negocios pendientes, la fecha límite del día 1 calendario y el enlace al Dashboard.
+
+Para revisar el calendario antes de activar el trigger, ejecuta desde Apps Script:
+
+```js
+probarCalendarioAlertasLiquidacion()
+```
+
+Para probar cada correo por separado sin activar el envío masivo, cambia `CONFIG.TEST_EMAIL` y ejecuta uno de estos wrappers:
+
+```js
+probarCorreoLiquidacion3Dias()
+probarCorreoLiquidacion2Dias()
+probarCorreoLiquidacion1Dia()
+probarCorreoLiquidacionCierre()
+```
 
 ## Simulación y prueba de correos
 

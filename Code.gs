@@ -719,7 +719,31 @@ function probarSimulacionAlertasLiquidacion() {
  * @return {string}
  */
 function probarCorreoLiquidacionBTM() {
-  return enviarCorreoPruebaLiquidacionBTM(CONFIG.TEST_EMAIL);
+  return enviarCorreoPruebaLiquidacionBTM(CONFIG.TEST_EMAIL, '3_DIAS');
+}
+
+/**
+ * Muestra las fechas exactas de alertas para un mes, sin enviar correos.
+ * @return {Object}
+ */
+function probarCalendarioAlertasLiquidacion() {
+  return simularCalendarioAlertasLiquidacion();
+}
+
+function probarCorreoLiquidacion3Dias() {
+  return enviarCorreoPruebaLiquidacionBTM(CONFIG.TEST_EMAIL, '3_DIAS');
+}
+
+function probarCorreoLiquidacion2Dias() {
+  return enviarCorreoPruebaLiquidacionBTM(CONFIG.TEST_EMAIL, '2_DIAS');
+}
+
+function probarCorreoLiquidacion1Dia() {
+  return enviarCorreoPruebaLiquidacionBTM(CONFIG.TEST_EMAIL, '1_DIA');
+}
+
+function probarCorreoLiquidacionCierre() {
+  return enviarCorreoPruebaLiquidacionBTM(CONFIG.TEST_EMAIL, 'CIERRE');
 }
 
 /**
@@ -750,7 +774,10 @@ function simularAlertasLiquidacionBTM(fechaISO) {
   return {
     enviaCorreo: emails.length > 0,
     fechaEvaluada: formatDateKey_(fecha),
+    tipoAlerta: alerta.type,
+    fechaLimite: alerta.deadlineLabel,
     asunto: alerta.subject,
+    titulo: alerta.title,
     destinatarios: emails,
     totalDestinatarios: emails.length,
     totalContratos: emails.reduce(function(total, email) { return total + grupos[email].length; }, 0),
@@ -762,27 +789,25 @@ function simularAlertasLiquidacionBTM(fechaISO) {
  * Envía un correo de prueba de alerta de liquidación al correo indicado o al usuario activo.
  * No depende de que hoy sea fecha de alerta.
  * @param {string=} emailDestino Correo destino opcional.
+ * @param {string=} tipoAlerta Tipo opcional: 3_DIAS, 2_DIAS, 1_DIA o CIERRE.
  * @return {string}
  */
-function enviarCorreoPruebaLiquidacionBTM(emailDestino) {
+function enviarCorreoPruebaLiquidacionBTM(emailDestino, tipoAlerta) {
   var destino = normalizeEmail_(emailDestino || getCurrentUserEmail_());
   if (!destino || destino.indexOf('@') === -1) throw new Error('Indica un correo válido para la prueba.');
 
-  var alerta = {
-    subject: '🧪 Prueba alerta de liquidación BTM',
-    title: 'Prueba de alerta de liquidación',
-    message: 'Este es un correo de prueba para validar el formato, destinatario y enlace al Dashboard. No corresponde a una alerta productiva.'
-  };
+  var alerta = buildLiquidationAlertByType_(tipoAlerta || '3_DIAS', getNextLiquidationFirstDay_(new Date()));
+  alerta.subject = '🧪 Prueba · ' + alerta.subject;
 
   var contratos = getSampleLiquidationContracts_();
   MailApp.sendEmail({
     to: destino,
     subject: alerta.subject,
-    body: buildLiquidationReminderBody_(alerta, contratos),
-    htmlBody: buildLiquidationReminderHtml_(alerta, contratos)
+    body: buildLiquidationReminderBody_(alerta, contratos, destino),
+    htmlBody: buildLiquidationReminderHtml_(alerta, contratos, destino)
   });
 
-  return 'Correo de prueba enviado a ' + destino + ' con ' + contratos.length + ' contrato(s) de muestra.';
+  return 'Correo de prueba ' + alerta.type + ' enviado a ' + destino + ' con ' + contratos.length + ' contrato(s) de muestra.';
 }
 
 function getSampleLiquidationContracts_() {
@@ -807,7 +832,7 @@ function getSampleLiquidationContracts_() {
 /**
  * Envía alertas mensuales de liquidación BTM según calendario:
  * - 3, 2 y 1 días hábiles antes del día 1.
- * - Día 2 calendario como cierre de novedades.
+ * - Día 1 calendario como cierre de novedades / periodo finalizado.
  * Ejecutar diariamente mediante trigger instalable.
  * @return {string}
  */
@@ -825,8 +850,8 @@ function enviarAlertasLiquidacionBTM() {
   var emails = Object.keys(grupos);
 
   emails.forEach(function(email) {
-    var body = buildLiquidationReminderBody_(alerta, grupos[email]);
-    var html = buildLiquidationReminderHtml_(alerta, grupos[email]);
+    var body = buildLiquidationReminderBody_(alerta, grupos[email], email);
+    var html = buildLiquidationReminderHtml_(alerta, grupos[email], email);
     MailApp.sendEmail({
       to: email,
       subject: alerta.subject,
@@ -895,35 +920,8 @@ function buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacion
 
 function getLiquidationAlertForDate_(date) {
   var todayKey = formatDateKey_(date);
-  var targetFirst = new Date(date.getFullYear(), date.getMonth(), 1);
-  if (date.getDate() > 2) targetFirst = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-
-  var alerts = [
-    {
-      date: addBusinessDays_(targetFirst, -3),
-      subject: '⏰ Puedes iniciar la liquidación de contratos BTM',
-      title: 'Ya puedes ir liquidando',
-      message: 'Faltan 3 días hábiles para dejar la liquidación lista a más tardar el día 1.'
-    },
-    {
-      date: addBusinessDays_(targetFirst, -2),
-      subject: '⚠️ Quedan 2 días para cerrar la liquidación BTM',
-      title: 'Quedan 2 días para el cierre',
-      message: 'Quedan 2 días hábiles para cerrar la liquidación del periodo de facturación.'
-    },
-    {
-      date: addBusinessDays_(targetFirst, -1),
-      subject: '🚨 Queda 1 día para registrar novedades de liquidación',
-      title: 'Queda 1 día para registrar novedades',
-      message: 'Mañana vence el plazo para dejar la liquidación lista y registrar novedades.'
-    },
-    {
-      date: new Date(targetFirst.getFullYear(), targetFirst.getMonth(), 2),
-      subject: '🔒 Cierre de novedades de liquidación BTM',
-      title: 'Cierre de novedades',
-      message: 'Hoy 02 de mes calendario se realiza el cierre de novedades de liquidación.'
-    }
-  ];
+  var targetFirst = getNextLiquidationFirstDay_(date);
+  var alerts = getLiquidationAlertsForFirstDay_(targetFirst);
 
   for (var i = 0; i < alerts.length; i++) {
     if (formatDateKey_(alerts[i].date) === todayKey) return alerts[i];
@@ -931,26 +929,134 @@ function getLiquidationAlertForDate_(date) {
   return null;
 }
 
-function buildLiquidationReminderBody_(alerta, contratos) {
+function getNextLiquidationFirstDay_(date) {
+  if (date.getDate() > 1) return new Date(date.getFullYear(), date.getMonth() + 1, 1);
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function getLiquidationAlertsForFirstDay_(targetFirst) {
+  return [
+    buildLiquidationAlertByType_('3_DIAS', targetFirst),
+    buildLiquidationAlertByType_('2_DIAS', targetFirst),
+    buildLiquidationAlertByType_('1_DIA', targetFirst),
+    buildLiquidationAlertByType_('CIERRE', targetFirst)
+  ];
+}
+
+function buildLiquidationAlertByType_(type, targetFirst) {
+  var deadlineLabel = formatDateDisplay_(targetFirst);
+  var alerts = {
+    '3_DIAS': {
+      type: '3_DIAS',
+      date: addBusinessDays_(targetFirst, -3),
+      subject: 'Ya puedes iniciar la liquidación de comisiones variables',
+      title: 'Inicio de liquidación mensual',
+      paragraphs: [
+        'Ya puedes iniciar la liquidación de los negocios a tu cargo que cuentan con comisión variable.',
+        'Te recomendamos revisar con anticipación la información y registrar las novedades correspondientes, con el fin de evitar pendientes al cierre del periodo.',
+        'Fecha límite para registrar novedades: ' + deadlineLabel,
+        'Puedes consultar los negocios pendientes en el Dashboard.'
+      ]
+    },
+    '2_DIAS': {
+      type: '2_DIAS',
+      date: addBusinessDays_(targetFirst, -2),
+      subject: 'Quedan 2 días hábiles para completar la liquidación',
+      title: 'Quedan 2 días hábiles para el cierre',
+      paragraphs: [
+        'Quedan 2 días hábiles para completar la liquidación de los negocios a tu cargo que tienen comisión variable.',
+        'Por favor, revisa los negocios pendientes y registra las novedades antes de la fecha de cierre.',
+        'Fecha límite: ' + deadlineLabel,
+        'Consulta el detalle de los negocios en el Dashboard.'
+      ]
+    },
+    '1_DIA': {
+      type: '1_DIA',
+      date: addBusinessDays_(targetFirst, -1),
+      subject: 'Queda 1 día hábil para registrar novedades',
+      title: 'Último día hábil para registrar novedades',
+      paragraphs: [
+        'Queda 1 día hábil para registrar las novedades asociadas a la liquidación de los negocios con comisión variable.',
+        'Te invitamos a validar hoy la información pendiente y completar la gestión antes del cierre.',
+        'Fecha límite: ' + deadlineLabel,
+        'Consulta los negocios pendientes en el Dashboard.',
+        'Evita que queden negocios sin liquidar.'
+      ]
+    },
+    'CIERRE': {
+      type: 'CIERRE',
+      date: new Date(targetFirst.getFullYear(), targetFirst.getMonth(), 1),
+      subject: 'Cierre de liquidación de comisiones variables',
+      title: 'Periodo de novedades finalizado',
+      paragraphs: [
+        'El periodo para registrar novedades de la liquidación de comisiones variables ha finalizado.',
+        'Al cierre, quedaron pendientes de gestión los siguientes negocios fiduciarios a tu cargo:',
+        'Por favor, revisa estos casos y realiza la gestión correspondiente de acuerdo con el procedimiento definido.',
+        'Para más información, consulta el Dashboard.'
+      ]
+    }
+  };
+  var alert = alerts[type] || alerts['3_DIAS'];
+  alert.deadline = targetFirst;
+  alert.deadlineLabel = deadlineLabel;
+  return alert;
+}
+
+function simularCalendarioAlertasLiquidacion(anio, mes) {
+  var hoy = new Date();
+  var targetYear = anio || hoy.getFullYear();
+  var targetMonthIndex = mes ? mes - 1 : hoy.getMonth();
+  var targetFirst = new Date(targetYear, targetMonthIndex, 1);
+  var alerts = getLiquidationAlertsForFirstDay_(targetFirst);
+
+  return {
+    mesEvaluado: Utilities.formatDate(targetFirst, Session.getScriptTimeZone(), 'yyyy-MM'),
+    fechaCierre: formatDateKey_(targetFirst),
+    alertas: alerts.map(function(alerta) {
+      return {
+        tipo: alerta.type,
+        fechaEnvio: formatDateKey_(alerta.date),
+        asunto: alerta.subject,
+        titulo: alerta.title,
+        fechaLimite: alerta.deadlineLabel,
+        mensajes: alerta.paragraphs
+      };
+    })
+  };
+}
+
+function buildLiquidationReminderBody_(alerta, contratos, emailDestino) {
+  var nombre = formatRecipientName_(emailDestino);
   var lines = [
-    alerta.title,
-    '',
-    alerta.message,
-    '',
-    'Contratos activos asociados: ' + contratos.length,
-    '',
-    'Ingresa al Dashboard: ' + CONFIG.DASHBOARD_URL,
+    'Hola, ' + nombre + ':',
     ''
   ];
+
+  alerta.paragraphs.forEach(function(paragraph) {
+    lines.push(paragraph);
+    lines.push('');
+  });
+
+  lines.push('Tabla o listado de negocios pendientes (' + contratos.length + '):');
+  lines.push('');
 
   contratos.slice(0, 30).forEach(function(item) {
     lines.push('• Radicación: ' + item.radicacion + ' | Código FIDUSAP: ' + item.codigoFidusap + ' | Negocio: ' + item.nombre + ' | Esquema: ' + item.esquema);
   });
 
+  lines.push('');
+  lines.push('Ingresa al Dashboard: ' + CONFIG.DASHBOARD_URL);
+  lines.push('');
+  lines.push('Gracias por tu gestión.');
+
   return lines.join('\n');
 }
 
-function buildLiquidationReminderHtml_(alerta, contratos) {
+function buildLiquidationReminderHtml_(alerta, contratos, emailDestino) {
+  var nombre = formatRecipientName_(emailDestino);
+  var paragraphHtml = alerta.paragraphs.map(function(paragraph) {
+    return '<p style="font-size:16px;line-height:1.55;margin:0 0 14px;">' + escapeHtml_(paragraph) + '</p>';
+  }).join('');
   var rows = contratos.slice(0, 30).map(function(item) {
     return '<tr>' +
       '<td style="padding:12px;border-bottom:1px solid #edf0f4;color:#001391;font-weight:700;">' + escapeHtml_(item.radicacion) + '</td>' +
@@ -968,8 +1074,9 @@ function buildLiquidationReminderHtml_(alerta, contratos) {
         '<p style="margin:10px 0 0;color:#d8ecff;">CRM Fiduciaria BBVA · Recordatorio de liquidación</p>' +
       '</div>' +
       '<div style="padding:28px 32px;">' +
-        '<p style="font-size:16px;line-height:1.55;margin:0 0 18px;">' + escapeHtml_(alerta.message) + '</p>' +
-        '<div style="background:#d8ecff;border-radius:16px;padding:16px 18px;margin-bottom:22px;"><strong>Contratos activos asociados:</strong> ' + contratos.length + '</div>' +
+        '<p style="font-size:17px;line-height:1.55;margin:0 0 18px;font-weight:800;">Hola, ' + escapeHtml_(nombre) + ':</p>' +
+        paragraphHtml +
+        '<div style="background:#d8ecff;border-radius:16px;padding:16px 18px;margin:18px 0 22px;"><strong>Tabla o listado de negocios pendientes:</strong> ' + contratos.length + '</div>' +
         '<table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #edf0f4;border-radius:14px;overflow:hidden;">' +
           '<thead><tr style="background:#f7f8fa;text-align:left;">' +
             '<th style="padding:12px;color:#5d668a;font-size:12px;text-transform:uppercase;">Radicación</th>' +
@@ -979,9 +1086,21 @@ function buildLiquidationReminderHtml_(alerta, contratos) {
           '</tr></thead><tbody>' + rows + '</tbody>' +
         '</table>' +
         '<div style="margin-top:26px;"><a href="' + CONFIG.DASHBOARD_URL + '" style="display:inline-block;background:#001391;color:#ffffff;text-decoration:none;border-radius:12px;padding:14px 22px;font-weight:800;">Ingresar al Dashboard</a></div>' +
+        '<p style="font-size:14px;line-height:1.55;margin:22px 0 0;color:#5d668a;">Gracias por tu gestión.</p>' +
       '</div>' +
     '</div>' +
   '</div>';
+}
+
+function formatRecipientName_(email) {
+  var local = normalizeEmail_(email).split('@')[0] || 'BTM';
+  return local.split(/[._-]+/).filter(Boolean).map(function(part) {
+    return part.charAt(0).toUpperCase() + part.slice(1);
+  }).join(' ') || 'BTM';
+}
+
+function formatDateDisplay_(date) {
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'dd/MM/yyyy');
 }
 
 function addBusinessDays_(date, days) {
