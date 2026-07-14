@@ -9,7 +9,9 @@ const CONFIG = {
     SFC: 'INV SFC',
     USUARIOS: 'usuarios',
     FACTURACION: 'facturacion',
-    LIQUIDACIONES: 'liquidaciones'
+    LIQUIDACIONES: 'liquidaciones',
+    TABLA_COMISIONES: 'Tabla de comisiones',
+    PRELIQUIDACIONES: 'preliquidaciones'
   },
   // Fallback de emergencia para no perder acceso si la hoja `usuarios` aún no existe.
   BOOTSTRAP_SUPER_ADMINS: [
@@ -104,8 +106,10 @@ function obtenerEcosistemaLiquidaciones() {
 
   var facturadosPeriodoActual = buildCurrentPeriodBillingMap_(libro);
   var liquidacionesPeriodoActual = buildCurrentPeriodLiquidationMap_(libro);
+  var preliquidacionesPeriodoActual = buildCurrentPeriodPreliquidationMap_(libro);
+  var tiposComision = getCommissionTypes_(libro);
 
-  return buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesAdicionales, datosControl, mapaAsignacionesBTM, mapaEstadosSFC, facturadosPeriodoActual, liquidacionesPeriodoActual);
+  return buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesAdicionales, datosControl, mapaAsignacionesBTM, mapaEstadosSFC, facturadosPeriodoActual, liquidacionesPeriodoActual, preliquidacionesPeriodoActual, tiposComision);
 }
 
 /**
@@ -188,6 +192,7 @@ function buildEmptyResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfile
     esFacturacion: esFacturacion,
     rolesDisponibles: buildRolesList_(esSuperAdmin, perfilesAdicionales, []),
     listaContratos: [],
+    tiposComision: [],
     metricas: { totalActivos: 0, totalVariables: 0, discrepancias: 0, pendientesFacturacionPeriodo: 0 },
     periodoActual: getCurrentBillingPeriod_()
   };
@@ -224,7 +229,7 @@ function buildBtmAssignmentsMap_(datosBTM) {
   return mapaAsignacionesBTM;
 }
 
-function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesAdicionales, datosControl, mapaAsignacionesBTM, mapaEstadosSFC, facturadosPeriodoActual, liquidacionesPeriodoActual) {
+function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesAdicionales, datosControl, mapaAsignacionesBTM, mapaEstadosSFC, facturadosPeriodoActual, liquidacionesPeriodoActual, preliquidacionesPeriodoActual, tiposComision) {
   var contratosProcesados = [];
   var rolesDetectados = new Set();
   var metricas = { totalActivos: 0, totalVariables: 0, discrepancias: 0, pendientesFacturacionPeriodo: 0 };
@@ -248,6 +253,8 @@ function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesA
     var estaActivo = estadoControl.toLowerCase() === 'activo';
     var facturadoPeriodoActual = Boolean(facturadosPeriodoActual[radicacionKey]);
     var liquidacionCerradaPeriodoActual = Boolean(liquidacionesPeriodoActual[radicacionKey]);
+    var preliquidacionesContrato = preliquidacionesPeriodoActual[radicacionKey] || [];
+    var preliquidadoPeriodoActual = preliquidacionesContrato.length > 0;
     if (esFacturacion && estaActivo && !facturadoPeriodoActual) metricas.pendientesFacturacionPeriodo++;
 
     if (rolesEnFila.length > 0 || esSuperAdmin || esFacturacion) {
@@ -268,11 +275,14 @@ function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesA
         fechaVigencia: formatSheetDate_(datosControl[row][CONFIG.CONTROL_COLS.FECHA_VIGENCIA]),
         tipoGeneral: toCleanString_(datosControl[row][CONFIG.CONTROL_COLS.TIPO]) || 'No Definido',
         textoComisionOriginal: toCleanString_(datosControl[row][CONFIG.CONTROL_COLS.COMISION]) || 'No Especificado',
+        descripcionComisiones: toCleanString_(datosControl[row][CONFIG.CONTROL_COLS.COMISION]) || 'No Especificado',
         esquemaComision: esquema,
         validacionSFC: estadoValidacion,
         estadoActual: estadoControl,
         facturadoPeriodoActual: facturadoPeriodoActual,
         liquidacionCerradaPeriodoActual: liquidacionCerradaPeriodoActual,
+        preliquidadoPeriodoActual: preliquidadoPeriodoActual,
+        preliquidacionesPeriodoActual: preliquidacionesContrato,
         asignados: {
           ProfesionalContable: asignados.profesionalContable,
           Contador: asignados.profesionalContable,
@@ -290,6 +300,7 @@ function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesA
     esFacturacion: esFacturacion,
     rolesDisponibles: buildRolesList_(esSuperAdmin, perfilesAdicionales, Array.from(rolesDetectados)),
     listaContratos: contratosProcesados,
+    tiposComision: tiposComision || [],
     metricas: metricas,
     periodoActual: getCurrentBillingPeriod_()
   };
@@ -493,6 +504,105 @@ function buildCurrentPeriodLiquidationMap_(book) {
   return map;
 }
 
+
+/**
+ * Registra una preliquidación por tipo de comisión y notifica a Facturación.
+ * @param {Object} payload Datos de preliquidación desde el frontend.
+ * @return {Object}
+ */
+function registrarPreliquidacionContrato(payload) {
+  payload = payload || {};
+  var book = SpreadsheetApp.getActiveSpreadsheet();
+  var email = getCurrentUserEmail_();
+  var sheets = getRequiredSheets_(book);
+  var datosControl = sheets.control.getDataRange().getValues();
+  var datosBTM = sheets.btm.getDataRange().getValues();
+  var asignaciones = buildBtmAssignmentsMap_(datosBTM);
+  var perfiles = getAdditionalProfiles_(book, email);
+  var esAdmin = isSuperAdmin_(email, perfiles);
+  var tipos = getCommissionTypes_(book);
+  var tipo = findCommissionType_(tipos, payload.tipoComision);
+  if (!tipo) throw new Error('Selecciona un tipo de comisión válido desde la tabla de comisiones.');
+
+  var radicacion = toCleanString_(payload.radicacion);
+  var key = normalizeKey_(radicacion);
+  if (!key) throw new Error('Radicación inválida para preliquidar.');
+
+  var controlPorRadicacion = buildControlRowsMap_(datosControl);
+  var row = controlPorRadicacion[key];
+  if (!row) throw new Error('No se encontró la radicación ' + radicacion + ' en control.');
+
+  var asignacion = asignaciones[key] || buildEmptyAssignment_();
+  var puedePreliquidar = esAdmin || email === asignacion.gerente || email === asignacion.profesionalBtm;
+  if (!puedePreliquidar) throw new Error('Solo BTM, profesional BTM o Súper Admin pueden generar la preliquidación.');
+
+  var calculo = calcularPreliquidacion_(tipo, payload.valores || {});
+  var period = getCurrentBillingPeriod_();
+  var now = new Date();
+  var sheet = getOrCreatePreliquidationSheet_(book);
+  var id = Utilities.getUuid();
+  var nombreNegocio = toCleanString_(row[CONFIG.CONTROL_COLS.NOMBRE_NEGOCIO]) || asignacion.nombreBTM;
+
+  sheet.appendRow([
+    now,
+    period,
+    id,
+    radicacion,
+    toCleanString_(row[CONFIG.CONTROL_COLS.CODIGO_FIDUSAP]) || '',
+    nombreNegocio,
+    tipo.tipo,
+    JSON.stringify(payload.valores || {}),
+    calculo.subtotal,
+    calculo.ivaValor,
+    calculo.total,
+    email,
+    'PRELIQUIDADA',
+    '',
+    '',
+    toCleanString_(row[CONFIG.CONTROL_COLS.COMISION]) || ''
+  ]);
+
+  notifyBillingPreliquidation_(book, email, nombreNegocio, radicacion, tipo.tipo, calculo);
+
+  return {
+    id: id,
+    radicacion: radicacion,
+    periodo: period,
+    tipoComision: tipo.tipo,
+    subtotal: calculo.subtotal,
+    iva: calculo.ivaValor,
+    total: calculo.total,
+    estado: 'PRELIQUIDADA',
+    mensaje: '✅ Preliquidación registrada por $' + calculo.total.toLocaleString('es-CO') + ' y notificada a Facturación.'
+  };
+}
+
+/**
+ * Facturación deja en firme una preliquidación cuando registra la factura en FIDUSAP.
+ * @param {string} preliquidacionId
+ * @param {string} facturaFidusap
+ * @return {string}
+ */
+function confirmarPreliquidacionFacturada(preliquidacionId, facturaFidusap) {
+  var book = SpreadsheetApp.getActiveSpreadsheet();
+  var email = getCurrentUserEmail_();
+  var perfiles = getAdditionalProfiles_(book, email);
+  if (!isSuperAdmin_(email, perfiles) && perfiles.indexOf(ROLES.FACTURACION) === -1) {
+    throw new Error('Solo Facturación puede dejar en firme la preliquidación facturada.');
+  }
+  var sheet = getOrCreatePreliquidationSheet_(book);
+  var data = sheet.getDataRange().getValues();
+  for (var row = 1; row < data.length; row++) {
+    if (toCleanString_(data[row][2]) === toCleanString_(preliquidacionId)) {
+      sheet.getRange(row + 1, 13).setValue('FACTURADA');
+      sheet.getRange(row + 1, 14).setValue(toCleanString_(facturaFidusap) || 'FIDUSAP registrado');
+      sheet.getRange(row + 1, 15).setValue(email);
+      return '✅ Preliquidación marcada como facturada en FIDUSAP.';
+    }
+  }
+  throw new Error('No se encontró la preliquidación indicada.');
+}
+
 function registrarCierreLiquidacionMensual(radicaciones) {
   var book = SpreadsheetApp.getActiveSpreadsheet();
   var email = getCurrentUserEmail_();
@@ -544,6 +654,170 @@ function getOrCreateLiquidationSheet_(book) {
     sheet.getRange(1, 1, 1, 6).setValues([['fecha_registro', 'periodo', 'radicacion', 'usuario', 'estado_liquidacion', 'esquema']]);
   }
   return sheet;
+}
+
+
+function getOrCreatePreliquidationSheet_(book) {
+  var sheet = book.getSheetByName(CONFIG.SHEETS.PRELIQUIDACIONES);
+  if (!sheet) {
+    sheet = book.insertSheet(CONFIG.SHEETS.PRELIQUIDACIONES);
+    sheet.getRange(1, 1, 1, 16).setValues([[
+      'fecha_registro', 'periodo', 'id', 'radicacion', 'codigo_fidusap', 'nombre_negocio',
+      'tipo_comision', 'valores_json', 'subtotal', 'iva', 'total', 'usuario_preliquida',
+      'estado_preliquidacion', 'factura_fidusap', 'usuario_factura', 'descripcion_comision'
+    ]]);
+  }
+  return sheet;
+}
+
+function buildCurrentPeriodPreliquidationMap_(book) {
+  var sheet = book.getSheetByName(CONFIG.SHEETS.PRELIQUIDACIONES);
+  var map = {};
+  if (!sheet || sheet.getLastRow() <= 1) return map;
+  var period = getCurrentBillingPeriod_();
+  var values = sheet.getDataRange().getValues();
+  for (var row = 1; row < values.length; row++) {
+    if (toCleanString_(values[row][1]) !== period) continue;
+    var key = normalizeKey_(values[row][3]);
+    if (!key) continue;
+    if (!map[key]) map[key] = [];
+    map[key].push({
+      fecha: formatSheetDate_(values[row][0]),
+      periodo: toCleanString_(values[row][1]),
+      id: toCleanString_(values[row][2]),
+      radicacion: toCleanString_(values[row][3]),
+      tipoComision: toCleanString_(values[row][6]),
+      subtotal: Number(values[row][8]) || 0,
+      iva: Number(values[row][9]) || 0,
+      total: Number(values[row][10]) || 0,
+      usuario: toCleanString_(values[row][11]),
+      estado: toCleanString_(values[row][12]) || 'PRELIQUIDADA',
+      facturaFidusap: toCleanString_(values[row][13])
+    });
+  }
+  return map;
+}
+
+function getCommissionTypes_(book) {
+  var sheet = book.getSheetByName(CONFIG.SHEETS.TABLA_COMISIONES);
+  if (!sheet || sheet.getLastRow() < 4) return [];
+  var smmlv = Number(sheet.getRange('B1').getValue()) || Number(sheet.getRange('A2').getValue()) || 0;
+  var lastRow = sheet.getLastRow();
+  var values = sheet.getRange(4, 1, lastRow - 3, 7).getValues();
+  var displays = sheet.getRange(4, 1, lastRow - 3, 7).getDisplayValues();
+  var backgrounds = sheet.getRange(4, 1, lastRow - 3, 7).getBackgrounds();
+  var result = [];
+  for (var i = 0; i < values.length; i++) {
+    var tipo = toCleanString_(values[i][0]);
+    if (!tipo) continue;
+    result.push({
+      tipo: tipo,
+      descripcion: toCleanString_(values[i][1]),
+      smmlv: smmlv,
+      campos: {
+        saldoUvr: buildCommissionField_('Saldos Medios / Cantidad UVR', 'saldoUvr', values[i][2], displays[i][2], backgrounds[i][2]),
+        valorUvr: buildCommissionField_('Valor / UVR (Pesos)', 'valorUvr', values[i][3], displays[i][3], backgrounds[i][3]),
+        cantidad: buildCommissionField_('Cantidad', 'cantidad', values[i][4], displays[i][4], backgrounds[i][4]),
+        iva: buildCommissionField_('IVA', 'iva', values[i][5], displays[i][5], backgrounds[i][5])
+      },
+      ejemploTotal: Number(values[i][6]) || parseCurrency_(displays[i][6]) || 0
+    });
+  }
+  return result;
+}
+
+function buildCommissionField_(label, key, value, display, background) {
+  return {
+    key: key,
+    label: label,
+    enabled: !isDisabledCommissionCell_(background),
+    ejemplo: toCleanString_(display),
+    valor: Number(value) || parseCurrency_(display) || 0
+  };
+}
+
+function isDisabledCommissionCell_(background) {
+  var hex = toCleanString_(background).replace('#', '');
+  if (hex.length !== 6) return false;
+  var r = parseInt(hex.substring(0, 2), 16);
+  var g = parseInt(hex.substring(2, 4), 16);
+  var b = parseInt(hex.substring(4, 6), 16);
+  return Math.abs(r - g) < 8 && Math.abs(g - b) < 8 && r >= 120 && r <= 210;
+}
+
+function findCommissionType_(tipos, tipoComision) {
+  var normalized = normalizaTexto_(tipoComision);
+  for (var i = 0; i < tipos.length; i++) {
+    if (normalizaTexto_(tipos[i].tipo) === normalized) return tipos[i];
+  }
+  return null;
+}
+
+function calcularPreliquidacion_(tipo, valores) {
+  var saldoUvr = parseNumber_(valores.saldoUvr);
+  var valorUvr = parseNumber_(valores.valorUvr);
+  var cantidad = parseNumber_(valores.cantidad);
+  var ivaRate = parseNumber_(valores.iva);
+  if (!ivaRate) ivaRate = 0.19;
+  if (ivaRate > 1) ivaRate = ivaRate / 100;
+
+  var enabled = tipo.campos || {};
+  var subtotal = 0;
+  if (enabled.saldoUvr && enabled.saldoUvr.enabled && enabled.valorUvr && enabled.valorUvr.enabled) {
+    subtotal = saldoUvr * valorUvr;
+  } else if (enabled.saldoUvr && enabled.saldoUvr.enabled && enabled.cantidad && enabled.cantidad.enabled) {
+    subtotal = saldoUvr * normalizeRate_(cantidad);
+  } else if (enabled.valorUvr && enabled.valorUvr.enabled && enabled.cantidad && enabled.cantidad.enabled) {
+    subtotal = valorUvr * (cantidad || 1);
+  } else if (enabled.valorUvr && enabled.valorUvr.enabled) {
+    subtotal = valorUvr;
+  } else if (enabled.cantidad && enabled.cantidad.enabled) {
+    subtotal = cantidad * (tipo.smmlv || 0);
+  } else if (enabled.saldoUvr && enabled.saldoUvr.enabled) {
+    subtotal = saldoUvr;
+  }
+
+  var ivaValor = subtotal * ivaRate;
+  return {
+    subtotal: Math.round(subtotal),
+    ivaValor: Math.round(ivaValor),
+    total: Math.round(subtotal + ivaValor),
+    ivaRate: ivaRate
+  };
+}
+
+function normalizeRate_(value) {
+  if (!value) return 0;
+  if (value > 1) return value / 100;
+  return value;
+}
+
+function parseNumber_(value) {
+  if (typeof value === 'number') return value;
+  var text = toCleanString_(value).replace(/\$/g, '').replace(/\./g, '').replace(/,/g, '.').replace(/%/g, '');
+  return Number(text) || 0;
+}
+
+function parseCurrency_(value) {
+  return parseNumber_(value);
+}
+
+function notifyBillingPreliquidation_(book, usuario, nombreNegocio, radicacion, tipoComision, calculo) {
+  var emails = getEmailsByProfile_(book, ROLES.FACTURACION);
+  if (!emails.length) return 0;
+  var subject = 'Preliquidación generada para facturación - ' + radicacion;
+  var body = 'Hola equipo de Facturación,\n\n' +
+    'El usuario BTM ' + usuario + ' generó una preliquidación para el negocio ' + nombreNegocio + '.\n\n' +
+    'Radicación: ' + radicacion + '\n' +
+    'Tipo de comisión: ' + tipoComision + '\n' +
+    'Subtotal: $' + calculo.subtotal.toLocaleString('es-CO') + '\n' +
+    'IVA: $' + calculo.ivaValor.toLocaleString('es-CO') + '\n' +
+    'Total: $' + calculo.total.toLocaleString('es-CO') + '\n\n' +
+    'Ingresa al Dashboard para dejar en firme la factura FIDUSAP: ' + CONFIG.DASHBOARD_URL;
+  emails.forEach(function(email) {
+    MailApp.sendEmail(email, subject, body);
+  });
+  return emails.length;
 }
 
 function buildControlRowsMap_(datosControl) {
@@ -770,7 +1044,8 @@ function simularAlertasLiquidacionBTM(fechaISO) {
   var datosBTM = sheets.btm.getDataRange().getValues();
   var asignaciones = buildBtmAssignmentsMap_(datosBTM);
   var liquidacionesPeriodoActual = buildCurrentPeriodLiquidationMap_(libro);
-  var grupos = buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual);
+  var preliquidacionesPeriodoActual = buildCurrentPeriodPreliquidationMap_(libro);
+  var grupos = buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual, preliquidacionesPeriodoActual);
   var emails = Object.keys(grupos);
 
   return {
@@ -819,7 +1094,8 @@ function getSampleLiquidationContracts_() {
   var datosBTM = sheets.btm.getDataRange().getValues();
   var asignaciones = buildBtmAssignmentsMap_(datosBTM);
   var liquidacionesPeriodoActual = buildCurrentPeriodLiquidationMap_(libro);
-  var grupos = buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual);
+  var preliquidacionesPeriodoActual = buildCurrentPeriodPreliquidationMap_(libro);
+  var grupos = buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual, preliquidacionesPeriodoActual);
   var emails = Object.keys(grupos);
   if (emails.length) return grupos[emails[0]].slice(0, 5);
 
@@ -848,7 +1124,8 @@ function enviarAlertasLiquidacionBTM() {
   var datosBTM = sheets.btm.getDataRange().getValues();
   var asignaciones = buildBtmAssignmentsMap_(datosBTM);
   var liquidacionesPeriodoActual = buildCurrentPeriodLiquidationMap_(libro);
-  var grupos = buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual);
+  var preliquidacionesPeriodoActual = buildCurrentPeriodPreliquidationMap_(libro);
+  var grupos = buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual, preliquidacionesPeriodoActual);
   var emails = Object.keys(grupos);
 
   emails.forEach(function(email) {
@@ -886,7 +1163,7 @@ function crearTriggerAlertasLiquidacion() {
   return 'Trigger diario de alertas de liquidación creado para las 8:00 a.m. según zona horaria del script.';
 }
 
-function buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual) {
+function buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacionesPeriodoActual, preliquidacionesPeriodoActual) {
   var grupos = {};
 
   for (var row = 1; row < datosControl.length; row++) {
@@ -897,6 +1174,7 @@ function buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacion
     var estado = toCleanString_(datosControl[row][CONFIG.CONTROL_COLS.ESTADO]) || 'Activo';
     if (estado.toLowerCase() !== 'activo') continue;
     if (liquidacionesPeriodoActual[radKey]) continue;
+    if (preliquidacionesPeriodoActual && preliquidacionesPeriodoActual[radKey]) continue;
 
     var esquema = interpretarTextoComision(datosControl[row][CONFIG.CONTROL_COLS.COMISION]);
     if (esquema !== 'Variable') continue;

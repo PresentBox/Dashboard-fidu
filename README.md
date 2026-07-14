@@ -139,3 +139,40 @@ probarCorreoLiquidacionBTM()
 ```
 
 Para cambiar el buzón de prueba, edita `CONFIG.TEST_EMAIL` en `Code.gs` y luego ejecuta `probarCorreoLiquidacionBTM()`.
+
+## Preliquidación por tipo de comisión
+
+La funcionalidad de preliquidación usa la pestaña `Tabla de comisiones` como catálogo operativo. El sistema lee:
+
+| Celda / columnas | Uso |
+| --- | --- |
+| `B1` | Base SMMLV para cálculos por salarios mínimos |
+| Fila 3 | Encabezados de campos de cálculo |
+| Columna A desde fila 4 | Tipo de comisión desplegable |
+| Columnas C, D, E y F | Campos habilitados según color de celda; las celdas grises se consideran no aplicables |
+| Columna G | Total de ejemplo / referencia |
+
+El rol BTM / Profesional BTM genera una o varias preliquidaciones por negocio para el periodo actual. Cada registro se guarda en la hoja `preliquidaciones`, creada automáticamente si no existe, y notifica al perfil `Facturación` configurado en la hoja `usuarios`.
+
+Columnas creadas automáticamente en `preliquidaciones`:
+
+| Columna | Campo |
+| --- | --- |
+| A | fecha_registro |
+| B | periodo |
+| C | id |
+| D | radicacion |
+| E | codigo_fidusap |
+| F | nombre_negocio |
+| G | tipo_comision |
+| H | valores_json |
+| I | subtotal |
+| J | iva |
+| K | total |
+| L | usuario_preliquida |
+| M | estado_preliquidacion |
+| N | factura_fidusap |
+| O | usuario_factura |
+| P | descripcion_comision |
+
+Cuando existe al menos una preliquidación del periodo para una radicación, esa radicación deja de aparecer en los alertamientos mensuales de pendiente por preliquidar. Facturación puede dejarla en firme con el botón `Dejar en firme FIDUSAP`, que cambia el estado a `FACTURADA` y registra la referencia de factura.
