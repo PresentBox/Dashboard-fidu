@@ -105,3 +105,20 @@ enviarCorreoPruebaLiquidacionBTM('tu.correo@bbva.com')
 ```
 
 Esta prueba no depende de que la fecha actual sea una fecha del calendario de alertas. Si no encuentra contratos variables pendientes, envía un contrato visual de prueba.
+
+### Cómo ejecutar pruebas desde el botón **Ejecutar** de Apps Script
+
+Apps Script no permite escribir argumentos directamente en la firma de la función. No cambies esto:
+
+```js
+function enviarCorreoPruebaLiquidacionBTM(emailDestino) {
+```
+
+Si quieres probar desde el selector de funciones, usa los wrappers sin parámetros:
+
+```js
+probarSimulacionAlertasLiquidacion()
+probarCorreoLiquidacionBTM()
+```
+
+Para cambiar el buzón de prueba, edita `CONFIG.TEST_EMAIL` en `Code.gs` y luego ejecuta `probarCorreoLiquidacionBTM()`.

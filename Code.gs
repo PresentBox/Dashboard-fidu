@@ -41,7 +41,9 @@ const CONFIG = {
   ESTADOS_PERMITIDOS: ['Activo', 'Inactivo', 'En Liquidación'],
   SIN_ASIGNAR_EMAIL: 'sin_asignar@bbva.com',
   CURRENT_PERIOD_FORMAT: 'yyyy-MM',
-  DASHBOARD_URL: 'https://script.google.com/a/macros/bbva.com/s/AKfycbyFsbZtNVXLaKN6Rba2uTPj9k4-1iBiqzlkleUwLQs1ytgS2nETaz_teUz9yQllh6Ey_A/exec'
+  DASHBOARD_URL: 'https://script.google.com/a/macros/bbva.com/s/AKfycbyFsbZtNVXLaKN6Rba2uTPj9k4-1iBiqzlkleUwLQs1ytgS2nETaz_teUz9yQllh6Ey_A/exec',
+  // Cambia este correo para ejecutar pruebas desde el menú de Apps Script sin editar parámetros de funciones.
+  TEST_EMAIL: 'davidorlando.diaz@bbva.com'
 };
 
 const ROLES = {
@@ -700,6 +702,25 @@ function escapeHtml_(value) {
 }
 
 
+
+
+/**
+ * Wrapper sin parámetros para Apps Script: simula la alerta con una fecha de ejemplo.
+ * Úsalo desde el botón Ejecutar sin escribir argumentos en la firma de la función.
+ * @return {Object}
+ */
+function probarSimulacionAlertasLiquidacion() {
+  return simularAlertasLiquidacionBTM('2026-07-29');
+}
+
+/**
+ * Wrapper sin parámetros para Apps Script: envía el correo de prueba al correo configurado.
+ * Cambia CONFIG.TEST_EMAIL si quieres probar con otro destinatario.
+ * @return {string}
+ */
+function probarCorreoLiquidacionBTM() {
+  return enviarCorreoPruebaLiquidacionBTM(CONFIG.TEST_EMAIL);
+}
 
 /**
  * Simula la alerta de liquidación sin enviar correos.
