@@ -1,0 +1,979 @@
+<script>
+  var cacheDatos = null;
+  var usuarioAuditadoEmail = null;
+  var loteCambiosPendientes = {};
+  var facturacionSeleccionada = {};
+  var datosListosParaIngreso = false;
+
+  window.addEventListener('load', function() {
+    var botonEntrar = document.getElementById('btnEntrarApp');
+    if (botonEntrar) botonEntrar.addEventListener('click', entrarAplicacion);
+    cargarEcosistemaCRM();
+  });
+
+  function cargarEcosistemaCRM() {
+    mostrarLoader('Conciliando bases de datos en tiempo récord...');
+
+    google.script.run
+      .withSuccessHandler(inicializarCRM)
+      .withFailureHandler(mostrarError)
+      .obtenerEcosistemaLiquidaciones();
+  }
+
+  function inicializarCRM(respuesta) {
+    cacheDatos = respuesta;
+    var tieneAcceso = usuarioTieneAcceso(respuesta);
+    setText('txtEmail', respuesta.usuario);
+    setText('avatarLetra', respuesta.usuario.substring(0, 1).toUpperCase());
+    setText('avatarLetraHero', respuesta.usuario.substring(0, 1).toUpperCase());
+    setText('txtSaludando', obtenerNombreUsuario(respuesta.usuario));
+    setText('m1', respuesta.metricas.totalActivos);
+    setText('m2', respuesta.metricas.totalVariables);
+    setText('m3', respuesta.metricas.discrepancias);
+    setText('m4', respuesta.metricas.pendientesFacturacionPeriodo || 0);
+    setText('m5', respuesta.metricas.totalInactivos || 0);
+    setText('m6', respuesta.metricas.totalEnLiquidacion || 0);
+    setText('m7', respuesta.metricas.totalFijos || 0);
+    setText('m8', respuesta.metricas.totalContratosComision || 0);
+    document.getElementById('metricFacturacion').classList.remove('hidden');
+    actualizarResumenPerfil(respuesta);
+    actualizarEstadoHome(tieneAcceso);
+
+    configurarPerfil(respuesta);
+    configurarEventos();
+    asegurarFiltroComision();
+    poblarTiposComisionNuevoNegocio(respuesta.tiposComision || []);
+    cambiarPerfilDeVista();
+  }
+
+  function configurarEventos() {
+    var selectorPerfil = document.getElementById('cmbPerfilVista');
+    var botonAuditar = document.getElementById('btnAuditarUsuario');
+    var botonGuardar = document.getElementById('btnGuardarLote');
+    var botonRegistrarFacturacion = document.getElementById('btnRegistrarFacturacion');
+    var botonEntrar = document.getElementById('btnEntrarApp');
+    var profileToggle = document.getElementById('profileToggle');
+    var newBusinessNav = document.getElementById('btnNewBusinessNav');
+    var newBusinessForm = document.getElementById('newBusinessForm');
+    var homeNav = document.getElementById('btnHomeNav');
+    var folderNav = document.getElementById('btnFolderNav');
+
+    if (selectorPerfil) selectorPerfil.onchange = cambiarPerfilDeVista;
+    if (botonAuditar) botonAuditar.onclick = auditarUsuarioFiltro;
+    if (botonGuardar) botonGuardar.onclick = guardarLoteCompletoCRM;
+    if (botonRegistrarFacturacion) botonRegistrarFacturacion.onclick = registrarPeriodoFacturado;
+    if (botonEntrar) botonEntrar.onclick = entrarAplicacion;
+    if (profileToggle) profileToggle.onclick = alternarResumenPerfil;
+    if (newBusinessNav) newBusinessNav.onclick = mostrarNuevoNegocio;
+    if (newBusinessForm) newBusinessForm.onsubmit = crearNuevoNegocio;
+    if (homeNav) homeNav.onclick = mostrarHome;
+    if (folderNav) folderNav.onclick = mostrarDashboard;
+  }
+
+
+
+  function actualizarResumenPerfil(respuesta) {
+    var roles = (respuesta.rolesDisponibles || []).join(' / ') || 'Sin perfil detectado';
+    setText('profileName', obtenerNombreUsuario(respuesta.usuario));
+    setText('profileEmail', respuesta.usuario);
+    setText('profileRole', 'Rol: ' + roles);
+    setText('profileInitial', respuesta.usuario.substring(0, 1).toUpperCase());
+    var clase = 'profile-photo ' + obtenerClasePerfil_(roles);
+    var photo = document.getElementById('profilePhoto');
+    var trigger = document.getElementById('profileToggle');
+    if (photo) { photo.className = clase; photo.title = roles; }
+    if (trigger) { trigger.className = clase + ' profile-trigger'; trigger.title = roles; }
+    setText('profileInitialMenu', respuesta.usuario.substring(0, 1).toUpperCase());
+  }
+
+  function obtenerClasePerfil_(roles) {
+    var normal = normalizarTextoPlano_(roles);
+    if (normal.indexOf('super') !== -1) return 'profile-admin';
+    if (normal.indexOf('facturacion') !== -1) return 'profile-billing';
+    if (normal.indexOf('gerente') !== -1) return 'profile-manager';
+    if (normal.indexOf('profesional') !== -1) return 'profile-professional';
+    return 'profile-default';
+  }
+
+  function normalizarTextoPlano_(texto) {
+    return (texto || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function estaEnVistaFacturacion() {
+    return Boolean(cacheDatos && cacheDatos.esFacturacion && getSelectValue('cmbPerfilVista', '') === 'FACTURACION');
+  }
+
+  function configurarPerfil(respuesta) {
+    var selector = document.getElementById('cmbPerfilVista');
+
+    if (respuesta.esAdmin) {
+      setText('txtPerfilReal', 'Súper Administrador ⭐');
+      document.getElementById('panelAuditoriaAdmin').classList.remove('hidden');
+      if (selector) {
+        selector.innerHTML = '<option value="TODOS">Súper Admin (Ver Todo)</option><option value="BTM">Entorno: BTM</option><option value="FACTURACION">Facturación</option>';
+        selector.disabled = false;
+      }
+      return;
+    }
+
+    setText('txtPerfilReal', respuesta.rolesDisponibles.join(' / ') || 'BTM');
+    document.getElementById('panelAuditoriaAdmin').classList.add('hidden');
+    if (!selector) return;
+
+    if (respuesta.esFacturacion) {
+      selector.innerHTML = '<option value="FACTURACION">Facturación</option><option value="BTM">Entorno: BTM / Especialista</option>';
+      selector.disabled = false;
+    } else {
+      selector.innerHTML = '<option value="BTM">Entorno: BTM / Especialista</option>';
+      selector.disabled = true;
+    }
+  }
+
+  function poblarTiposComisionNuevoNegocio(tipos) {
+    var select = document.getElementById('newBusinessCommissionType');
+    if (!select) return;
+    select.innerHTML = '<option value="">Selecciona tipo de comisión</option>';
+    tipos.forEach(function(tipo) {
+      var option = document.createElement('option');
+      option.value = tipo.tipo;
+      option.textContent = tipo.tipo;
+      select.appendChild(option);
+    });
+  }
+
+  function asegurarFiltroComision() {
+    var cajaSelector = document.querySelector('.profile-selector-box');
+    if (!cajaSelector || document.getElementById('cmbFiltroComision')) return;
+
+    var selectFiltro = document.createElement('select');
+    selectFiltro.id = 'cmbFiltroComision';
+    selectFiltro.onchange = cambiarPerfilDeVista;
+    selectFiltro.innerHTML = '<option value="TODAS">🔍 Todas las Comisiones</option><option value="Variable">Solo Variables</option><option value="Fija">Solo Fijas</option>';
+    cajaSelector.appendChild(selectFiltro);
+  }
+
+  function auditarUsuarioFiltro() {
+    var correo = document.getElementById('txtBuscarUsuario').value.trim().toLowerCase();
+    usuarioAuditadoEmail = correo === '' ? null : correo;
+    setText('lblBandeja', usuarioAuditadoEmail ? 'Expedientes de: ' + correo : 'Bandeja de Control y Trazabilidad');
+    cambiarPerfilDeVista();
+  }
+
+  function cambiarPerfilDeVista() {
+    if (!cacheDatos) return;
+
+    var vista = getSelectValue('cmbPerfilVista', cacheDatos.esAdmin ? 'TODOS' : (cacheDatos.esFacturacion ? 'FACTURACION' : 'BTM'));
+    var filterComision = getSelectValue('cmbFiltroComision', 'TODAS');
+    var lista = cacheDatos.listaContratos || [];
+    var contenedor = document.getElementById('workspaceExpedientes');
+    var fragment = document.createDocumentFragment();
+    var contadorProcesados = 0;
+    var contratosVisibles = [];
+
+    contenedor.innerHTML = '';
+    document.getElementById('loader').style.display = 'none';
+
+    lista.forEach(function(item) {
+      if (!debeMostrarContrato(item, vista, filterComision)) return;
+      contratosVisibles.push(item);
+      try {
+        contadorProcesados++;
+        fragment.appendChild(crearTarjetaContrato(item));
+      } catch (renderError) {
+        console.error('Error renderizando contrato', item && item.radicacion, renderError);
+      }
+    });
+
+    actualizarMetricasVista(contratosVisibles);
+
+    if (contadorProcesados === 0) {
+      contenedor.innerHTML = '<div class="loading">No se encontraron registros contractuales para la vista actual.</div>';
+      return;
+    }
+
+    contenedor.appendChild(fragment);
+  }
+
+  function actualizarMetricasVista(contratos) {
+    var metricas = contratos.reduce(function(acc, item) {
+      if (normalizarEstado(item.estadoActual) === 'activo') acc.totalActivos++;
+      if (normalizarEstado(item.estadoActual) === 'inactivo') acc.totalInactivos++;
+      if (normalizarEstado(item.estadoActual) === 'en liquidacion') acc.totalEnLiquidacion++;
+      if (item.esquemaComision === 'Variable') acc.totalVariables++;
+      if (item.esquemaComision === 'Fija') acc.totalFijos++;
+      if (item.esquemaComision === 'Variable' || item.esquemaComision === 'Fija') acc.totalContratosComision++;
+      if (item.validacionSFC !== 'OK') acc.discrepancias++;
+      if (cacheDatos.esFacturacion) {
+        if (normalizarEstado(item.estadoActual) === 'activo' && !item.facturadoPeriodoActual) acc.pendientesFacturacionPeriodo++;
+      } else if (item.esquemaComision === 'Variable' && normalizarEstado(item.estadoActual) === 'activo' && !item.preliquidadoPeriodoActual && !item.liquidacionCerradaPeriodoActual) {
+        acc.pendientesFacturacionPeriodo++;
+      }
+      return acc;
+    }, { totalActivos: 0, totalVariables: 0, discrepancias: 0, pendientesFacturacionPeriodo: 0, totalInactivos: 0, totalEnLiquidacion: 0, totalFijos: 0, totalContratosComision: 0 });
+
+    setText('m1', metricas.totalActivos);
+    setText('m2', metricas.totalVariables);
+    setText('m3', metricas.discrepancias);
+    setText('m4', metricas.pendientesFacturacionPeriodo);
+    setText('m5', metricas.totalInactivos);
+    setText('m6', metricas.totalEnLiquidacion);
+    setText('m7', metricas.totalFijos);
+    setText('m8', metricas.totalContratosComision);
+  }
+
+  function debeMostrarContrato(item, vista, filterComision) {
+    var mostrarFila = false;
+
+    if (vista === 'FACTURACION' && cacheDatos.esFacturacion) {
+      mostrarFila = normalizarEstado(item.estadoActual) === 'activo' && !item.facturadoPeriodoActual;
+    } else if (cacheDatos.esAdmin && vista === 'TODOS' && !usuarioAuditadoEmail) {
+      mostrarFila = true;
+    } else {
+      var correoAValidar = usuarioAuditadoEmail || cacheDatos.usuario;
+      mostrarFila = item.asignados.GerenteBTM === correoAValidar || item.asignados.ProfesionalSujeto === correoAValidar;
+    }
+
+    if (estaEnVistaFacturacion()) {
+      mostrarFila = tienePreliquidacionesPorFacturar(item);
+    } else if (item.esquemaComision === 'Variable' && (item.preliquidadoPeriodoActual || item.liquidacionCerradaPeriodoActual)) {
+      mostrarFila = false;
+    }
+
+    if (filterComision !== 'TODAS' && item.esquemaComision !== filterComision) {
+      mostrarFila = false;
+    }
+
+    return mostrarFila;
+  }
+
+  function tienePreliquidacionesPorFacturar(item) {
+    return (item.preliquidacionesPeriodoActual || []).some(function(pre) {
+      return pre.estado !== 'FACTURADA';
+    });
+  }
+
+  function crearTarjetaContrato(item) {
+    var tarjeta = document.createElement('article');
+    var estadoEnUso = loteCambiosPendientes[item.radicacion] || item.estadoActual;
+    var estaPendiente = Boolean(loteCambiosPendientes[item.radicacion]);
+
+    tarjeta.className = 'crm-card-file compact-card' + (estaPendiente ? ' changed-pending-crm' : '') + (item.preliquidadoPeriodoActual ? ' preliquidated-card' : '');
+    tarjeta.id = 'card_' + item.radicacion;
+
+    tarjeta.appendChild(crearFilaPrincipal(item, estadoEnUso));
+
+    var detalle = document.createElement('div');
+    detalle.className = 'contract-details collapsed';
+    detalle.id = 'details_' + item.radicacion;
+    detalle.appendChild(crearBloqueDatosOperacion(item));
+    detalle.appendChild(crearMetaBox(item));
+    detalle.appendChild(crearBloquePreLiquidacion(item));
+    if (estaEnVistaFacturacion()) {
+      detalle.appendChild(crearSelectorFacturacion(item));
+    }
+    detalle.appendChild(crearFilaAcciones(item));
+    tarjeta.appendChild(detalle);
+
+    return tarjeta;
+  }
+
+  function crearFilaPrincipal(item, estadoEnUso) {
+    var fila = document.createElement('div');
+    fila.className = 'crm-card-row';
+
+    var radicacion = document.createElement('div');
+    radicacion.className = 'rad-id';
+    radicacion.innerHTML = '<i class="fa-solid fa-receipt"></i> ';
+    radicacion.appendChild(document.createTextNode(item.radicacion));
+
+    var detalle = document.createElement('div');
+    detalle.style.flex = '1';
+    detalle.innerHTML = '<p class="negocio-name"></p><p class="negocio-sub"></p>';
+    detalle.querySelector('.negocio-name').textContent = item.nombreNegocio;
+    detalle.querySelector('.negocio-sub').textContent = 'Código FIDUSAP: ' + (item.codigoFidusap || 'Sin código') + ' | Tipo: ' + item.tipoGeneral + ' | Esquema: ' + item.esquemaComision;
+
+    var validacion = document.createElement('div');
+    validacion.appendChild(crearBadgeValidacion(item.validacionSFC));
+
+    var estado = document.createElement('div');
+    estado.appendChild(crearSelectEstado(item, estadoEnUso));
+
+    var toggle = document.createElement('button');
+    toggle.className = 'card-toggle-btn';
+    toggle.type = 'button';
+    toggle.innerHTML = '<i class="fa-solid fa-chevron-down"></i> Ver detalle';
+    toggle.onclick = function() { alternarDetalleContrato(item.radicacion, toggle); };
+
+    fila.appendChild(radicacion);
+    fila.appendChild(detalle);
+    fila.appendChild(validacion);
+    fila.appendChild(estado);
+    fila.appendChild(toggle);
+    return fila;
+  }
+
+
+  function crearBloqueDatosOperacion(item) {
+    var grid = document.createElement('div');
+    grid.className = 'operation-data-grid';
+
+    [
+      ['Código FIDUSAP', item.codigoFidusap],
+      ['No. de Radicación', item.radicacion],
+      ['Nombre del negocio', item.nombreNegocioControl || item.nombreNegocio],
+      ['Gerente BTM', item.asignados.GerenteBTM || 'Sin asignar'],
+      ['Profesional BTM', item.asignados.ProfesionalBTM || item.asignados.ProfesionalSujeto || 'Sin asignar'],
+      ['Profesional especializado contable', item.asignados.ProfesionalContable || item.asignados.Contador || 'Sin asignar'],
+      ['Estado', item.estadoActual],
+      ['Fecha de constitución', item.fechaConstitucion || 'No registrada'],
+      ['Fecha de vigencia', item.fechaVigencia || 'No registrada']
+    ].forEach(function(row) {
+      var field = document.createElement('div');
+      field.className = 'operation-field';
+      var label = document.createElement('span');
+      label.textContent = row[0];
+      var value = document.createElement('strong');
+      value.textContent = row[1] || 'No registrado';
+      field.appendChild(label);
+      field.appendChild(value);
+      grid.appendChild(field);
+    });
+
+    return grid;
+  }
+
+  function crearBloquePreLiquidacion(item) {
+    var wrapper = document.createElement('div');
+    wrapper.className = 'preliquidation-box';
+
+    var title = document.createElement('div');
+    title.className = 'preliquidation-title';
+    title.innerHTML = '<span><i class="fa-solid fa-file-invoice-dollar"></i> Preliquidación del periodo</span>';
+    var status = document.createElement('span');
+    status.className = 'preliquidation-status';
+    status.textContent = item.preliquidadoPeriodoActual ? 'Preliquidado' : 'Pendiente';
+    title.appendChild(status);
+
+    var historico = crearResumenPreliquidaciones(item);
+    var form = crearFormularioPreliquidacion(item);
+
+    wrapper.appendChild(title);
+    wrapper.appendChild(historico);
+    if (!estaEnVistaFacturacion()) wrapper.appendChild(form);
+    return wrapper;
+  }
+
+  function crearResumenPreliquidaciones(item) {
+    var resumen = document.createElement('div');
+    resumen.className = 'preliquidation-summary';
+    var lista = item.preliquidacionesPeriodoActual || [];
+    if (!lista.length) {
+      if (item.ultimaPreliquidacion) {
+        var ultima = item.ultimaPreliquidacion;
+        resumen.innerHTML = '<div class="preliquidation-chip"><strong>Última preliquidación registrada · ' + escapeHtml(ultima.periodo || 'Sin periodo') + '</strong><span>' + escapeHtml(ultima.tipoComision || 'Tipo no definido') + ' · Total: ' + formatoMoneda(ultima.total) + '</span></div>';
+      } else {
+        resumen.textContent = 'Aún no hay preliquidaciones registradas para el periodo actual.';
+      }
+      return resumen;
+    }
+
+    lista.forEach(function(pre) {
+      var row = document.createElement('div');
+      row.className = 'preliquidation-chip';
+      row.innerHTML = '<strong></strong><span></span>';
+      row.querySelector('strong').textContent = pre.tipoComision + ' · ' + (pre.estado || 'PRELIQUIDADA');
+      row.querySelector('span').textContent = 'Subtotal: ' + formatoMoneda(pre.subtotal) + ' · IVA: ' + formatoMoneda(pre.iva) + ' · Valor a facturar: ' + formatoMoneda(pre.total) + (pre.facturaFidusap ? ' · Factura: ' + pre.facturaFidusap : '');
+      if (estaEnVistaFacturacion() && pre.estado !== 'FACTURADA') {
+        row.appendChild(crearBotonConfirmarFactura(pre.id));
+      }
+      resumen.appendChild(row);
+    });
+    return resumen;
+  }
+
+  function crearFormularioPreliquidacion(item) {
+    var form = document.createElement('div');
+    form.className = 'preliquidation-form';
+    if (!cacheDatos.tiposComision || !cacheDatos.tiposComision.length) {
+      form.textContent = 'No se encontró la pestaña "Tabla de comisiones" o no tiene tipos configurados desde la fila 4.';
+      return form;
+    }
+
+    var select = document.createElement('select');
+    select.className = 'preliq-type-select';
+    select.innerHTML = '<option value="">Selecciona tipo de comisión</option>';
+    cacheDatos.tiposComision.forEach(function(tipo) {
+      var option = document.createElement('option');
+      option.value = tipo.tipo;
+      option.textContent = tipo.tipo;
+      select.appendChild(option);
+    });
+
+    var fields = document.createElement('div');
+    fields.className = 'preliq-fields';
+    var totalPreview = document.createElement('div');
+    totalPreview.className = 'preliq-total-preview';
+    totalPreview.textContent = 'Total estimado: $0';
+
+    function renderFields() {
+      fields.innerHTML = '';
+      var tipo = obtenerTipoComision(select.value);
+      if (!tipo) return;
+      Object.keys(tipo.campos).forEach(function(key) {
+        var campo = tipo.campos[key];
+        if (!campo.enabled || key === 'iva') return;
+        var label = document.createElement('label');
+        label.className = 'preliq-field';
+        label.innerHTML = '<span></span><input type="number" step="0.01" min="0">';
+        label.querySelector('span').textContent = campo.label + (campo.ejemplo ? ' · Ej: ' + campo.ejemplo : '');
+        label.querySelector('input').dataset.key = key;
+        label.querySelector('input').value = campo.valorEntrada || campo.valor || '';
+        label.querySelector('input').oninput = actualizarPreview;
+        fields.appendChild(label);
+      });
+      actualizarPreview();
+    }
+
+    function actualizarPreview() {
+      var tipo = obtenerTipoComision(select.value);
+      var valores = leerValoresPreliq(fields);
+      var total = calcularPreviewPreliq(tipo, valores);
+      var desglose = calcularPreviewPreliqDesglosado(tipo, valores);
+      totalPreview.textContent = 'Subtotal: ' + formatoMoneda(desglose.subtotal) + ' | IVA 19%: ' + formatoMoneda(desglose.iva) + ' | Total: ' + formatoMoneda(desglose.total);
+    }
+
+    var pendientes = [];
+    var listaPendientes = document.createElement('div');
+    listaPendientes.className = 'preliq-pending-list';
+    var totalPendientes = document.createElement('div');
+    totalPendientes.className = 'preliq-total-preview';
+    totalPendientes.textContent = 'Total seleccionado para guardar: $0';
+
+    function renderPendientes() {
+      listaPendientes.innerHTML = '';
+      var total = 0;
+      pendientes.forEach(function(pendiente, index) {
+        total += pendiente.calculo.total;
+        var chip = document.createElement('div');
+        chip.className = 'preliquidation-chip';
+        chip.innerHTML = '<strong></strong><span></span><button type="button" class="mini-remove-btn">Quitar</button>';
+        chip.querySelector('strong').textContent = pendiente.tipoComision;
+        chip.querySelector('span').textContent = 'Subtotal ' + formatoMoneda(pendiente.calculo.subtotal) + ' · IVA ' + formatoMoneda(pendiente.calculo.iva) + ' · Total ' + formatoMoneda(pendiente.calculo.total);
+        chip.querySelector('button').onclick = function() { pendientes.splice(index, 1); renderPendientes(); };
+        listaPendientes.appendChild(chip);
+      });
+      totalPendientes.textContent = 'Total seleccionado para guardar: ' + formatoMoneda(total);
+    }
+
+    var botonAgregar = document.createElement('button');
+    botonAgregar.className = 'crm-btn close-liquidation-btn';
+    botonAgregar.type = 'button';
+    botonAgregar.innerHTML = '<i class="fa-solid fa-plus"></i> Agregar tipo de comisión';
+    botonAgregar.onclick = function() {
+      if (!select.value) {
+        alert('Selecciona el tipo de comisión para agregarlo.');
+        return;
+      }
+      var valores = leerValoresPreliq(fields);
+      pendientes.push({
+        radicacion: item.radicacion,
+        tipoComision: select.value,
+        valores: valores,
+        calculo: calcularPreviewPreliqDesglosado(obtenerTipoComision(select.value), valores)
+      });
+      renderPendientes();
+    };
+
+    var botonGuardar = document.createElement('button');
+    botonGuardar.className = 'crm-btn crm-btn-primary';
+    botonGuardar.type = 'button';
+    botonGuardar.innerHTML = '<i class="fa-solid fa-calculator"></i> Guardar y cerrar preliquidación';
+    botonGuardar.onclick = function() {
+      if (!pendientes.length && select.value) {
+        botonAgregar.onclick();
+      }
+      generarPreliquidaciones(item.radicacion, pendientes, botonGuardar);
+    };
+    select.onchange = renderFields;
+
+    form.appendChild(select);
+    form.appendChild(fields);
+    form.appendChild(totalPreview);
+    var ayuda = document.createElement('div');
+    ayuda.className = 'preliq-help';
+    ayuda.textContent = 'Puedes agregar uno o varios tipos de comisión. Al guardar, el sistema registra cada tipo por separado y muestra el total consolidado.';
+    form.appendChild(ayuda);
+    form.appendChild(botonAgregar);
+    form.appendChild(listaPendientes);
+    form.appendChild(totalPendientes);
+    form.appendChild(botonGuardar);
+    return form;
+  }
+
+  function crearBadgeValidacion(validacionSFC) {
+    var badge = document.createElement('span');
+    var esOk = validacionSFC === 'OK';
+    badge.className = 'badge ' + (esOk ? 'badge-ok' : 'badge-alert');
+    badge.innerHTML = esOk ? '<i class="fa-solid fa-circle-check"></i> ' : '<i class="fa-solid fa-triangle-exclamation"></i> ';
+    badge.appendChild(document.createTextNode(esOk ? 'Conciliación Única OK' : validacionSFC));
+    return badge;
+  }
+
+  function crearSelectEstado(item, estadoEnUso) {
+    var select = document.createElement('select');
+    select.className = 'select-estado-sfc';
+    select.dataset.radicacion = item.radicacion;
+    select.dataset.estadoOriginal = item.estadoActual;
+    if (estaEnVistaFacturacion()) {
+      select.disabled = true;
+      select.title = 'Facturación solo visualiza estados y registra periodos facturados.';
+    } else {
+      select.onchange = function() { registrarCambioEnLote(item.radicacion, select, item.estadoActual); };
+    }
+
+    ['Activo', 'Inactivo', 'En Liquidación'].forEach(function(estado) {
+      var option = document.createElement('option');
+      option.value = estado;
+      option.textContent = obtenerIconoEstado(estado) + ' ' + estado;
+      option.selected = normalizarEstado(estadoEnUso) === normalizarEstado(estado);
+      select.appendChild(option);
+    });
+
+    return select;
+  }
+
+  function crearMetaBox(item) {
+    var meta = document.createElement('div');
+    meta.className = 'info-meta-box commission-description-box';
+
+    var descripcion = document.createElement('div');
+    descripcion.innerHTML = '<strong>Descripción de la comisión:</strong> ';
+    descripcion.appendChild(document.createTextNode(item.descripcionComisiones || item.textoComisionOriginal || 'No especificada'));
+
+    meta.appendChild(descripcion);
+    return meta;
+  }
+
+  function crearSelectorFacturacion(item) {
+    var wrapper = document.createElement('label');
+    wrapper.className = 'billing-check-row';
+
+    var checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = Boolean(facturacionSeleccionada[item.radicacion]);
+    checkbox.onchange = function() {
+      if (checkbox.checked) {
+        facturacionSeleccionada[item.radicacion] = true;
+      } else {
+        delete facturacionSeleccionada[item.radicacion];
+      }
+      actualizarBarraFacturacionUI();
+    };
+
+    wrapper.appendChild(checkbox);
+    wrapper.appendChild(document.createTextNode(' Marcar este negocio como facturado para el periodo ' + (cacheDatos.periodoActual || 'actual')));
+    return wrapper;
+  }
+
+  function crearFilaAcciones(item) {
+    var fila = document.createElement('div');
+    fila.className = 'crm-card-row preliq-footer-row';
+    fila.style.justifyContent = 'flex-end';
+    fila.style.paddingTop = '5px';
+    fila.style.borderTop = '1px dashed #e1e4e8';
+
+    var zona = document.createElement('div');
+    zona.className = 'action-zone';
+    if (item.preliquidadoPeriodoActual || item.liquidacionCerradaPeriodoActual) {
+      zona.innerHTML = '<span style="color:#137333; font-size:12px; font-weight:800;"><i class="fa-solid fa-circle-check"></i> Estado: preliquidado para el periodo</span>';
+    } else {
+      zona.innerHTML = '<span style="color:#5d668a; font-size:12px; font-weight:700;"><i class="fa-solid fa-circle-info"></i> Selecciona un tipo de comisión y genera la preliquidación desde el bloque superior.</span>';
+    }
+
+    fila.appendChild(zona);
+    return fila;
+  }
+
+  function crearInputMonto(radicacion) {
+    var input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.className = 'crm-input';
+    input.id = 'input_' + radicacion;
+    input.placeholder = '$ Base Variable';
+    return input;
+  }
+
+  function crearBotonLiquidar(radicacion) {
+    var button = document.createElement('button');
+    button.className = 'crm-btn crm-btn-primary';
+    button.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar';
+    button.onclick = function() { enviarLiquidacionBTM(radicacion); };
+    return button;
+  }
+
+
+  function crearBotonCerrarLiquidacion(radicacion) {
+    var button = document.createElement('button');
+    button.className = 'crm-btn close-liquidation-btn';
+    button.innerHTML = '<i class="fa-solid fa-calendar-check"></i> Cerrar liquidación mes';
+    button.onclick = function() { cerrarLiquidacionMensual(radicacion); };
+    return button;
+  }
+
+
+  function alternarDetalleContrato(radicacion, boton) {
+    var detalle = document.getElementById('details_' + radicacion);
+    if (!detalle) return;
+    var collapsed = detalle.classList.toggle('collapsed');
+    boton.innerHTML = collapsed ? '<i class="fa-solid fa-chevron-down"></i> Ver detalle' : '<i class="fa-solid fa-chevron-up"></i> Ocultar detalle';
+  }
+
+  function obtenerTipoComision(nombre) {
+    return (cacheDatos.tiposComision || []).filter(function(tipo) { return tipo.tipo === nombre; })[0] || null;
+  }
+
+  function leerValoresPreliq(container) {
+    var valores = {};
+    Array.prototype.forEach.call(container.querySelectorAll('input[data-key]'), function(input) {
+      valores[input.dataset.key] = Number(input.value) || 0;
+    });
+    valores.iva = 19;
+    return valores;
+  }
+
+  function calcularPreviewPreliq(tipo, valores) {
+    return calcularPreviewPreliqDesglosado(tipo, valores).total;
+  }
+
+  function calcularPreviewPreliqDesglosado(tipo, valores) {
+    if (!tipo) return { subtotal: 0, iva: 0, total: 0 };
+    var campos = tipo.campos || {};
+    var subtotal = 0;
+    if (campos.saldoUvr && campos.saldoUvr.enabled && campos.valorUvr && campos.valorUvr.enabled) subtotal = valores.saldoUvr * valores.valorUvr;
+    else if (campos.saldoUvr && campos.saldoUvr.enabled && campos.cantidad && campos.cantidad.enabled) subtotal = valores.saldoUvr * normalizarPorcentaje(valores.cantidad);
+    else if (campos.valorUvr && campos.valorUvr.enabled && campos.cantidad && campos.cantidad.enabled) subtotal = valores.valorUvr * (campos.cantidad.modo === 'porcentaje' ? normalizarPorcentaje(valores.cantidad) : (valores.cantidad || 1));
+    else if (campos.valorUvr && campos.valorUvr.enabled) subtotal = valores.valorUvr;
+    else if (campos.cantidad && campos.cantidad.enabled) subtotal = valores.cantidad * (tipo.smmlv || 0);
+    else if (campos.saldoUvr && campos.saldoUvr.enabled) subtotal = valores.saldoUvr;
+    var iva = Math.round(subtotal * 0.19);
+    return { subtotal: Math.round(subtotal), iva: iva, total: Math.round(subtotal + iva) };
+  }
+
+  function normalizarPorcentaje(valor) {
+    if (!valor) return 0;
+    return valor >= 1 ? valor / 100 : valor;
+  }
+
+  function formatoMoneda(valor) {
+    return '$' + (Number(valor) || 0).toLocaleString('es-CO');
+  }
+
+  function generarPreliquidaciones(radicacion, pendientes, boton) {
+    if (!pendientes.length) {
+      alert('Agrega al menos un tipo de comisión antes de guardar.');
+      return;
+    }
+    boton.disabled = true;
+    mostrarProceso('Guardando preliquidación y notificando a Facturación...');
+    var payloads = pendientes.map(function(item) {
+      return { radicacion: radicacion, tipoComision: item.tipoComision, valores: item.valores };
+    });
+    google.script.run
+      .withSuccessHandler(function(respuesta) {
+        ocultarProceso();
+        alert(respuesta.mensaje || 'Preliquidación registrada.');
+        cargarEcosistemaCRM();
+      })
+      .withFailureHandler(function(err) {
+        ocultarProceso();
+        alert('Error al generar preliquidación: ' + err.message);
+        boton.disabled = false;
+      })
+      .registrarPreliquidacionesContrato(payloads);
+  }
+
+  function crearBotonConfirmarFactura(preliquidacionId) {
+    var boton = document.createElement('button');
+    boton.className = 'crm-btn close-liquidation-btn';
+    boton.type = 'button';
+    boton.textContent = 'Dejar en firme FIDUSAP';
+    boton.onclick = function() {
+      var factura = prompt('Número o referencia de factura FIDUSAP:');
+      if (factura === null) return;
+      google.script.run
+        .withSuccessHandler(function(respuesta) { alert(respuesta); cargarEcosistemaCRM(); })
+        .withFailureHandler(function(err) { alert('Error al confirmar factura: ' + err.message); })
+        .confirmarPreliquidacionFacturada(preliquidacionId, factura);
+    };
+    return boton;
+  }
+
+  function registrarCambioEnLote(radicacion, elementoSelect, estadoOriginalHoja) {
+    var nuevoEstado = elementoSelect.value;
+    var tarjeta = document.getElementById('card_' + radicacion);
+
+    if (normalizarEstado(nuevoEstado) === normalizarEstado(estadoOriginalHoja)) {
+      delete loteCambiosPendientes[radicacion];
+      if (tarjeta) tarjeta.classList.remove('changed-pending-crm');
+    } else {
+      loteCambiosPendientes[radicacion] = nuevoEstado;
+      if (tarjeta) tarjeta.classList.add('changed-pending-crm');
+    }
+
+    actualizarBarraFlotanteUI();
+  }
+
+  function actualizarBarraFlotanteUI() {
+    var longitudLote = Object.keys(loteCambiosPendientes).length;
+    var barra = document.getElementById('floatingSaveBar');
+    var contador = document.getElementById('txtLoteCount');
+
+    setText('txtLoteCount', longitudLote);
+    barra.classList.toggle('hidden', longitudLote === 0);
+    contador.setAttribute('aria-label', longitudLote + ' cambios pendientes');
+  }
+
+  function actualizarBarraFacturacionUI() {
+    var cantidad = Object.keys(facturacionSeleccionada).length;
+    setText('txtFacturacionCount', cantidad);
+    document.getElementById('facturacionActionBar').classList.toggle('hidden', cantidad === 0);
+  }
+
+  function registrarPeriodoFacturado() {
+    var radicaciones = Object.keys(facturacionSeleccionada);
+    if (radicaciones.length === 0) {
+      alert('Selecciona al menos un negocio.');
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function(respuesta) {
+        alert(respuesta);
+        facturacionSeleccionada = {};
+        actualizarBarraFacturacionUI();
+        cargarEcosistemaCRM();
+      })
+      .withFailureHandler(function(err) { alert('Error al registrar facturación: ' + err.message); })
+      .registrarFacturacionPeriodo(radicaciones);
+  }
+
+  function guardarLoteCompletoCRM() {
+    var barra = document.getElementById('floatingSaveBar');
+    var botonGuardar = document.getElementById('btnGuardarLote');
+
+    botonGuardar.disabled = true;
+    barra.style.pointerEvents = 'none';
+    barra.style.opacity = '0.6';
+    mostrarLoader('Procesando transacciones en bloque y enviando alertas unificadas...');
+
+    google.script.run
+      .withSuccessHandler(function(resultadoServidor) {
+        alert(resultadoServidor);
+        loteCambiosPendientes = {};
+        actualizarBarraFlotanteUI();
+        restaurarBarraLote();
+        cargarEcosistemaCRM();
+      })
+      .withFailureHandler(function(err) {
+        alert('Error al procesar el lote: ' + err.message);
+        restaurarBarraLote();
+        document.getElementById('loader').style.display = 'none';
+      })
+      .guardarAjustesEnLote(loteCambiosPendientes);
+  }
+
+  function restaurarBarraLote() {
+    var barra = document.getElementById('floatingSaveBar');
+    var botonGuardar = document.getElementById('btnGuardarLote');
+    botonGuardar.disabled = false;
+    barra.style.pointerEvents = 'auto';
+    barra.style.opacity = '1';
+  }
+
+
+  function cerrarLiquidacionMensual(radicacion) {
+    google.script.run
+      .withSuccessHandler(function(respuesta) {
+        alert(respuesta);
+        cargarEcosistemaCRM();
+      })
+      .withFailureHandler(function(err) { alert('Error al cerrar liquidación: ' + err.message); })
+      .registrarCierreLiquidacionMensual([radicacion]);
+  }
+
+  function enviarLiquidacionBTM(radicacion) {
+    var monto = Number(document.getElementById('input_' + radicacion).value);
+    if (!monto || monto <= 0) {
+      alert('Ingresa un monto válido.');
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function(res) { alert(res); })
+      .withFailureHandler(function(err) { alert('Error al enviar liquidación: ' + err.message); })
+      .ejecutarAccionServidor(radicacion, 'LIQUIDAR', monto, 'BTM');
+  }
+
+  function mostrarLoader(mensaje) {
+    var loader = document.getElementById('loader');
+    loader.style.display = 'block';
+    loader.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> ' + mensaje;
+  }
+
+  function mostrarError(err) {
+    document.getElementById('loader').innerHTML = '<span style="color:#c5221f; font-weight:bold;">Error: ' + err.message + '</span>';
+    setText('homeStatus', 'No fue posible cargar la información: ' + err.message);
+  }
+
+  function usuarioTieneAcceso(respuesta) {
+    return Boolean(respuesta && (respuesta.esAdmin || respuesta.esFacturacion || (respuesta.listaContratos || []).length > 0));
+  }
+
+  function actualizarEstadoHome(tieneAcceso) {
+    var boton = document.getElementById('btnEntrarApp');
+    datosListosParaIngreso = tieneAcceso;
+    if (!boton) return;
+
+    if (!tieneAcceso) {
+      boton.disabled = true;
+      boton.innerHTML = '<i class="fa-solid fa-lock"></i> Sin acceso';
+      setText('homeStatus', 'Tu usuario no posee información asignada o no tiene acceso configurado. Valida tu correo en la hoja usuarios o tus asignaciones en CONT/BTM.');
+      return;
+    }
+
+    boton.disabled = false;
+    boton.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket"></i> Ingresar a Fidu Gestión';
+    setText('homeStatus', 'Información cargada correctamente. Ya puedes ingresar a la herramienta.');
+  }
+
+  function entrarAplicacion() {
+    if (!datosListosParaIngreso) {
+      setText('homeStatus', 'La información aún no está lista o tu usuario no tiene acceso configurado.');
+      return;
+    }
+    mostrarDashboard();
+  }
+
+  function mostrarDashboard() {
+    var home = document.getElementById('homeScreen');
+    var sidebar = document.getElementById('sidebarApp');
+    var app = document.getElementById('appShell');
+    if (home) home.classList.add('hidden');
+    if (sidebar) sidebar.classList.remove('hidden');
+    if (app) app.classList.remove('hidden');
+    mostrarSeccionOperativa_('dashboard');
+    setNavActivo_('btnFolderNav');
+  }
+
+  function mostrarHome() {
+    var home = document.getElementById('homeScreen');
+    var sidebar = document.getElementById('sidebarApp');
+    var app = document.getElementById('appShell');
+    if (home) home.classList.remove('hidden');
+    if (sidebar) sidebar.classList.add('hidden');
+    if (app) app.classList.add('hidden');
+    setNavActivo_('btnHomeNav');
+  }
+
+  function setNavActivo_(id) {
+    ['btnHomeNav', 'btnFolderNav', 'btnNewBusinessNav'].forEach(function(btnId) {
+      var btn = document.getElementById(btnId);
+      if (btn) btn.classList.toggle('active', btnId === id);
+    });
+  }
+
+
+  function alternarResumenPerfil() {
+    var card = document.getElementById('profileSummaryCard');
+    if (card) card.classList.toggle('hidden');
+  }
+
+  function mostrarProceso(mensaje) {
+    setText('processText', mensaje || 'Procesando...');
+    var overlay = document.getElementById('processOverlay');
+    if (overlay) overlay.classList.remove('hidden');
+  }
+
+  function ocultarProceso() {
+    var overlay = document.getElementById('processOverlay');
+    if (overlay) overlay.classList.add('hidden');
+  }
+
+  function mostrarNuevoNegocio() {
+    if (!datosListosParaIngreso) return;
+    var home = document.getElementById('homeScreen');
+    var sidebar = document.getElementById('sidebarApp');
+    var app = document.getElementById('appShell');
+    if (home) home.classList.add('hidden');
+    if (sidebar) sidebar.classList.remove('hidden');
+    if (app) app.classList.remove('hidden');
+    mostrarSeccionOperativa_('nuevo');
+    setNavActivo_('btnNewBusinessNav');
+  }
+
+  function mostrarSeccionOperativa_(seccion) {
+    var crm = document.querySelector('.crm-container');
+    var nuevo = document.getElementById('newBusinessSection');
+    var toolbar = document.querySelector('.crm-container .crm-toolbar');
+    if (crm) crm.classList.toggle('hidden', seccion !== 'dashboard');
+    if (nuevo) nuevo.classList.toggle('hidden', seccion !== 'nuevo');
+  }
+
+  function crearNuevoNegocio(event) {
+    event.preventDefault();
+    var form = event.target;
+    var payload = {};
+    Array.prototype.forEach.call(form.elements, function(field) {
+      if (field.name) payload[field.name] = field.value;
+    });
+    var boton = document.getElementById('btnCrearNegocio');
+    if (boton) boton.disabled = true;
+    mostrarProceso('Creando negocio y asignaciones...');
+    google.script.run
+      .withSuccessHandler(function(respuesta) {
+        ocultarProceso();
+        alert(respuesta);
+        form.reset();
+        if (boton) boton.disabled = false;
+        cargarEcosistemaCRM();
+        mostrarDashboard();
+      })
+      .withFailureHandler(function(err) {
+        ocultarProceso();
+        alert('Error al crear negocio: ' + err.message);
+        if (boton) boton.disabled = false;
+      })
+      .registrarNuevoNegocio(payload);
+  }
+
+  function obtenerNombreUsuario(email) {
+    return (email || 'usuario').split('.')[0];
+  }
+
+  function obtenerIconoEstado(estado) {
+    if (estado === 'Activo') return '🟢';
+    if (estado === 'Inactivo') return '🔴';
+    return '🟡';
+  }
+
+  function normalizarEstado(estado) {
+    return String(estado || '').toLowerCase();
+  }
+
+  function getSelectValue(id, fallback) {
+    var element = document.getElementById(id);
+    return element ? element.value : fallback;
+  }
+
+  function setText(id, value) {
+    var element = document.getElementById(id);
+    if (element) element.textContent = value;
+  }
+
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>'"]/g, function(char) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char];
+    });
+  }
+</script>
