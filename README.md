@@ -176,3 +176,9 @@ Columnas creadas automáticamente en `preliquidaciones`:
 | P | descripcion_comision |
 
 Cuando existe al menos una preliquidación del periodo para una radicación, esa radicación deja de aparecer en los alertamientos mensuales de pendiente por preliquidar. Facturación puede dejarla en firme con el botón `Dejar en firme FIDUSAP`, que cambia el estado a `FACTURADA` y registra la referencia de factura.
+
+### Ajustes de cálculo de preliquidación
+
+Los campos porcentuales de la `Tabla de comisiones` se muestran al usuario como porcentaje entero cuando la hoja los almacena como decimal. Por ejemplo, un `3%` almacenado como `0,03` se presenta como `3` y se calcula como `3%`. Para cantidades de salarios mínimos, valores como `0,65` se conservan como `0,65` y se multiplican directamente por el SMMLV configurado.
+
+En el frontend el usuario puede agregar uno o varios tipos de comisión a un resumen temporal y luego guardar/cerrar la preliquidación. El sistema registra cada tipo como una línea independiente y devuelve el total consolidado del periodo seleccionado.

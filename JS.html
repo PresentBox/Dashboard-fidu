@@ -352,7 +352,7 @@
         label.innerHTML = '<span></span><input type="number" step="0.01" min="0">';
         label.querySelector('span').textContent = campo.label + (campo.ejemplo ? ' · Ej: ' + campo.ejemplo : '');
         label.querySelector('input').dataset.key = key;
-        label.querySelector('input').value = campo.valor || '';
+        label.querySelector('input').value = campo.valorEntrada || campo.valor || '';
         label.querySelector('input').oninput = actualizarPreview;
         fields.appendChild(label);
       });
@@ -366,11 +366,58 @@
       totalPreview.textContent = 'Total estimado con IVA 19%: ' + formatoMoneda(total);
     }
 
-    var boton = document.createElement('button');
-    boton.className = 'crm-btn crm-btn-primary';
-    boton.type = 'button';
-    boton.innerHTML = '<i class="fa-solid fa-calculator"></i> Generar y cerrar preliquidación';
-    boton.onclick = function() { generarPreliquidacion(item.radicacion, select.value, fields, boton); };
+    var pendientes = [];
+    var listaPendientes = document.createElement('div');
+    listaPendientes.className = 'preliq-pending-list';
+    var totalPendientes = document.createElement('div');
+    totalPendientes.className = 'preliq-total-preview';
+    totalPendientes.textContent = 'Total seleccionado para guardar: $0';
+
+    function renderPendientes() {
+      listaPendientes.innerHTML = '';
+      var total = 0;
+      pendientes.forEach(function(pendiente, index) {
+        total += pendiente.total;
+        var chip = document.createElement('div');
+        chip.className = 'preliquidation-chip';
+        chip.innerHTML = '<strong></strong><span></span><button type="button" class="mini-remove-btn">Quitar</button>';
+        chip.querySelector('strong').textContent = pendiente.tipoComision;
+        chip.querySelector('span').textContent = formatoMoneda(pendiente.total);
+        chip.querySelector('button').onclick = function() { pendientes.splice(index, 1); renderPendientes(); };
+        listaPendientes.appendChild(chip);
+      });
+      totalPendientes.textContent = 'Total seleccionado para guardar: ' + formatoMoneda(total);
+    }
+
+    var botonAgregar = document.createElement('button');
+    botonAgregar.className = 'crm-btn close-liquidation-btn';
+    botonAgregar.type = 'button';
+    botonAgregar.innerHTML = '<i class="fa-solid fa-plus"></i> Agregar tipo de comisión';
+    botonAgregar.onclick = function() {
+      if (!select.value) {
+        alert('Selecciona el tipo de comisión para agregarlo.');
+        return;
+      }
+      var valores = leerValoresPreliq(fields);
+      pendientes.push({
+        radicacion: item.radicacion,
+        tipoComision: select.value,
+        valores: valores,
+        total: calcularPreviewPreliq(obtenerTipoComision(select.value), valores)
+      });
+      renderPendientes();
+    };
+
+    var botonGuardar = document.createElement('button');
+    botonGuardar.className = 'crm-btn crm-btn-primary';
+    botonGuardar.type = 'button';
+    botonGuardar.innerHTML = '<i class="fa-solid fa-calculator"></i> Guardar y cerrar preliquidación';
+    botonGuardar.onclick = function() {
+      if (!pendientes.length && select.value) {
+        botonAgregar.onclick();
+      }
+      generarPreliquidaciones(item.radicacion, pendientes, botonGuardar);
+    };
     select.onchange = renderFields;
 
     form.appendChild(select);
@@ -378,9 +425,12 @@
     form.appendChild(totalPreview);
     var ayuda = document.createElement('div');
     ayuda.className = 'preliq-help';
-    ayuda.textContent = 'Puedes generar una preliquidación por cada tipo de comisión aplicable al periodo. Los campos no aplicables quedan ocultos según la Tabla de comisiones.';
+    ayuda.textContent = 'Puedes agregar uno o varios tipos de comisión. Al guardar, el sistema registra cada tipo por separado y muestra el total consolidado.';
     form.appendChild(ayuda);
-    form.appendChild(boton);
+    form.appendChild(botonAgregar);
+    form.appendChild(listaPendientes);
+    form.appendChild(totalPendientes);
+    form.appendChild(botonGuardar);
     return form;
   }
 
@@ -424,12 +474,7 @@
     descripcion.innerHTML = '<strong>Descripción de la comisión:</strong> ';
     descripcion.appendChild(document.createTextNode(item.descripcionComisiones || item.textoComisionOriginal || 'No especificada'));
 
-    var contador = document.createElement('div');
-    contador.innerHTML = '<strong>Profesional contable:</strong> ';
-    contador.appendChild(document.createTextNode(item.asignados.ProfesionalContable || item.asignados.Contador || 'Sin asignar'));
-
     meta.appendChild(descripcion);
-    meta.appendChild(contador);
     return meta;
   }
 
@@ -527,7 +572,7 @@
     var subtotal = 0;
     if (campos.saldoUvr && campos.saldoUvr.enabled && campos.valorUvr && campos.valorUvr.enabled) subtotal = valores.saldoUvr * valores.valorUvr;
     else if (campos.saldoUvr && campos.saldoUvr.enabled && campos.cantidad && campos.cantidad.enabled) subtotal = valores.saldoUvr * normalizarPorcentaje(valores.cantidad);
-    else if (campos.valorUvr && campos.valorUvr.enabled && campos.cantidad && campos.cantidad.enabled) subtotal = valores.valorUvr * (valores.cantidad || 1);
+    else if (campos.valorUvr && campos.valorUvr.enabled && campos.cantidad && campos.cantidad.enabled) subtotal = valores.valorUvr * (campos.cantidad.modo === 'porcentaje' ? normalizarPorcentaje(valores.cantidad) : (valores.cantidad || 1));
     else if (campos.valorUvr && campos.valorUvr.enabled) subtotal = valores.valorUvr;
     else if (campos.cantidad && campos.cantidad.enabled) subtotal = valores.cantidad * (tipo.smmlv || 0);
     else if (campos.saldoUvr && campos.saldoUvr.enabled) subtotal = valores.saldoUvr;
@@ -543,12 +588,15 @@
     return '$' + (Number(valor) || 0).toLocaleString('es-CO');
   }
 
-  function generarPreliquidacion(radicacion, tipoComision, fields, boton) {
-    if (!tipoComision) {
-      alert('Selecciona el tipo de comisión para preliquidar.');
+  function generarPreliquidaciones(radicacion, pendientes, boton) {
+    if (!pendientes.length) {
+      alert('Agrega al menos un tipo de comisión antes de guardar.');
       return;
     }
     boton.disabled = true;
+    var payloads = pendientes.map(function(item) {
+      return { radicacion: radicacion, tipoComision: item.tipoComision, valores: item.valores };
+    });
     google.script.run
       .withSuccessHandler(function(respuesta) {
         alert(respuesta.mensaje || 'Preliquidación registrada.');
@@ -558,7 +606,7 @@
         alert('Error al generar preliquidación: ' + err.message);
         boton.disabled = false;
       })
-      .registrarPreliquidacionContrato({ radicacion: radicacion, tipoComision: tipoComision, valores: leerValoresPreliq(fields) });
+      .registrarPreliquidacionesContrato(payloads);
   }
 
   function crearBotonConfirmarFactura(preliquidacionId) {

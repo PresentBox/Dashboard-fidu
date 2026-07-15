@@ -577,6 +577,28 @@ function registrarPreliquidacionContrato(payload) {
   };
 }
 
+
+/**
+ * Registra una o varias preliquidaciones de una misma radicación y devuelve el total consolidado.
+ * @param {Object[]} paquetes
+ * @return {Object}
+ */
+function registrarPreliquidacionesContrato(paquetes) {
+  if (!Array.isArray(paquetes) || paquetes.length === 0) {
+    throw new Error('Agrega al menos un tipo de comisión para preliquidar.');
+  }
+  var resultados = paquetes.map(function(paquete) {
+    return registrarPreliquidacionContrato(paquete);
+  });
+  var total = resultados.reduce(function(sum, item) { return sum + (Number(item.total) || 0); }, 0);
+  return {
+    cantidad: resultados.length,
+    total: total,
+    resultados: resultados,
+    mensaje: '✅ Se registraron ' + resultados.length + ' preliquidación(es). Total consolidado: $' + total.toLocaleString('es-CO') + '.'
+  };
+}
+
 /**
  * Facturación deja en firme una preliquidación cuando registra la factura en FIDUSAP.
  * @param {string} preliquidacionId
@@ -725,10 +747,10 @@ function getCommissionTypes_(book) {
       descripcion: toCleanString_(values[i][1]),
       smmlv: smmlv,
       campos: {
-        saldoUvr: buildCommissionField_('Saldos Medios / Cantidad UVR', 'saldoUvr', values[i][2], displays[i][2], backgrounds[i][2]),
-        valorUvr: buildCommissionField_('Valor / UVR (Pesos)', 'valorUvr', values[i][3], displays[i][3], backgrounds[i][3]),
-        cantidad: buildCommissionField_('Cantidad', 'cantidad', values[i][4], displays[i][4], backgrounds[i][4]),
-        iva: buildCommissionField_('IVA', 'iva', values[i][5], displays[i][5], backgrounds[i][5])
+        saldoUvr: buildCommissionField_('Saldos Medios / Cantidad UVR', 'saldoUvr', tipo, values[i][1], values[i][2], displays[i][2], backgrounds[i][2]),
+        valorUvr: buildCommissionField_('Valor / UVR (Pesos)', 'valorUvr', tipo, values[i][1], values[i][3], displays[i][3], backgrounds[i][3]),
+        cantidad: buildCommissionField_('Cantidad', 'cantidad', tipo, values[i][1], values[i][4], displays[i][4], backgrounds[i][4]),
+        iva: buildCommissionField_('IVA', 'iva', tipo, values[i][1], values[i][5], displays[i][5], backgrounds[i][5])
       },
       ejemploTotal: Number(values[i][6]) || parseCurrency_(displays[i][6]) || 0
     });
@@ -736,14 +758,28 @@ function getCommissionTypes_(book) {
   return result;
 }
 
-function buildCommissionField_(label, key, value, display, background) {
+function buildCommissionField_(label, key, tipo, descripcion, value, display, background) {
+  var mode = inferCommissionFieldMode_(key, tipo, descripcion, display);
+  var rawValue = Number(value) || parseCurrency_(display) || 0;
   return {
     key: key,
     label: label,
     enabled: !isDisabledCommissionCell_(background),
     ejemplo: toCleanString_(display),
-    valor: Number(value) || parseCurrency_(display) || 0
+    valor: rawValue,
+    valorEntrada: mode === 'porcentaje' && rawValue > 0 && rawValue <= 1 ? rawValue * 100 : rawValue,
+    modo: mode
   };
+}
+
+function inferCommissionFieldMode_(key, tipo, descripcion, display) {
+  if (key !== 'cantidad') return key;
+  var text = normalizaTexto_(tipo + ' ' + descripcion + ' ' + display);
+  if (text.indexOf('%') !== -1 || text.indexOf('porcentaje') !== -1 || text.indexOf('ventas') !== -1 || text.indexOf('rendimientos') !== -1 || text.indexOf('recursos administrados') !== -1) {
+    return 'porcentaje';
+  }
+  if (text.indexOf('salario') !== -1 || text.indexOf('smmlv') !== -1 || text.indexOf('smlmv') !== -1) return 'salarios';
+  return 'cantidad';
 }
 
 function isDisabledCommissionCell_(background) {
@@ -778,7 +814,7 @@ function calcularPreliquidacion_(tipo, valores) {
   } else if (enabled.saldoUvr && enabled.saldoUvr.enabled && enabled.cantidad && enabled.cantidad.enabled) {
     subtotal = saldoUvr * normalizeRate_(cantidad);
   } else if (enabled.valorUvr && enabled.valorUvr.enabled && enabled.cantidad && enabled.cantidad.enabled) {
-    subtotal = valorUvr * (cantidad || 1);
+    subtotal = valorUvr * (enabled.cantidad.modo === 'porcentaje' ? normalizeRate_(cantidad) : (cantidad || 1));
   } else if (enabled.valorUvr && enabled.valorUvr.enabled) {
     subtotal = valorUvr;
   } else if (enabled.cantidad && enabled.cantidad.enabled) {
