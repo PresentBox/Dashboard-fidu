@@ -141,6 +141,78 @@
       option.textContent = tipo.tipo;
       select.appendChild(option);
     });
+    select.onchange = renderPreviewComisionesNuevoNegocio;
+    renderPreviewComisionesNuevoNegocio();
+  }
+
+  function renderPreviewComisionesNuevoNegocio() {
+    var select = document.getElementById('newBusinessCommissionType');
+    var contenedor = document.getElementById('newBusinessCommissionPreview');
+    if (!select || !contenedor) return;
+    var seleccionados = Array.prototype.map.call(select.selectedOptions || [], function(option) { return option.value; }).filter(Boolean);
+    contenedor.innerHTML = '';
+    if (!seleccionados.length) {
+      contenedor.innerHTML = '<div class="preliq-help">Selecciona un tipo de comisión para ver los datos que se deben capturar y calcular el valor estimado.</div>';
+      return;
+    }
+    seleccionados.forEach(function(nombreTipo) {
+      var tipo = obtenerTipoComision(nombreTipo);
+      if (!tipo) return;
+      var card = document.createElement('div');
+      card.className = 'preliquidation-chip new-business-preview-card';
+      var titulo = document.createElement('strong');
+      titulo.textContent = nombreTipo;
+      var descripcion = document.createElement('span');
+      descripcion.textContent = tipo.descripcion || 'Sin descripción de cálculo configurada.';
+      var campos = document.createElement('div');
+      campos.className = 'preliq-fields';
+      var total = document.createElement('div');
+      total.className = 'preliq-total-preview';
+
+      function actualizarTotal() {
+        var valores = leerValoresPreliq(campos);
+        var desglose = calcularPreviewPreliqDesglosado(tipo, valores);
+        total.textContent = 'Subtotal: ' + formatoMoneda(desglose.subtotal) + ' | IVA 19%: ' + formatoMoneda(desglose.iva) + ' | Total estimado: ' + formatoMoneda(desglose.total);
+      }
+
+      Object.keys(tipo.campos || {}).forEach(function(key) {
+        var campo = tipo.campos[key];
+        if (!campo.enabled || key === 'iva') return;
+        var label = document.createElement('label');
+        label.className = 'preliq-field';
+        label.innerHTML = '<span></span><input type="number" step="0.01" min="0">';
+        label.querySelector('span').textContent = campo.label + (campo.ejemplo ? ' · Ej: ' + campo.ejemplo : '');
+        var input = label.querySelector('input');
+        input.dataset.key = key;
+        input.value = campo.valorEntrada || campo.valor || '';
+        input.oninput = actualizarTotal;
+        campos.appendChild(label);
+      });
+
+      card.appendChild(titulo);
+      card.appendChild(descripcion);
+      card.appendChild(campos);
+      card.appendChild(total);
+      contenedor.appendChild(card);
+      actualizarTotal();
+    });
+  }
+
+  function poblarCatalogosAsignacion(catalogos) {
+    poblarDatalist('gerentesBtmList', catalogos.gerentesBtm || []);
+    poblarDatalist('profesionalesBtmList', catalogos.profesionalesBtm || []);
+    poblarDatalist('profesionalesContablesList', catalogos.profesionalesContables || []);
+  }
+
+  function poblarDatalist(id, emails) {
+    var list = document.getElementById(id);
+    if (!list) return;
+    list.innerHTML = '';
+    emails.forEach(function(email) {
+      var option = document.createElement('option');
+      option.value = email;
+      list.appendChild(option);
+    });
   }
 
   function poblarCatalogosAsignacion(catalogos) {
@@ -1084,6 +1156,7 @@
         ocultarProceso();
         alert(respuesta);
         form.reset();
+        renderPreviewComisionesNuevoNegocio();
         if (boton) boton.disabled = false;
         cargarEcosistemaCRM();
         mostrarDashboard();
