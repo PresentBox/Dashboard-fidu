@@ -182,3 +182,9 @@ Cuando existe al menos una preliquidación del periodo para una radicación, esa
 Los campos porcentuales de la `Tabla de comisiones` se muestran al usuario como porcentaje entero cuando la hoja los almacena como decimal. Por ejemplo, un `3%` almacenado como `0,03` se presenta como `3` y se calcula como `3%`. Para cantidades de salarios mínimos, valores como `0,65` se conservan como `0,65` y se multiplican directamente por el SMMLV configurado.
 
 En el frontend el usuario puede agregar uno o varios tipos de comisión a un resumen temporal y luego guardar/cerrar la preliquidación. El sistema registra cada tipo como una línea independiente y devuelve el total consolidado del periodo seleccionado.
+
+## Creación de nuevo negocio
+
+El menú lateral mantiene tres acciones principales: Home, Preliquidación y Crear nuevo negocio. La opción de nuevo negocio muestra un formulario en blanco para que un BTM registre una radicación nueva con datos abiertos de control, asignaciones BTM y descripción de comisiones. Al guardar, el sistema agrega la fila en `control` y la asignación en `CONT/BTM`.
+
+Las métricas de gestión se calculan sobre la vista/filtro actual e incluyen contratos activos, variables, discrepancias, inactivos y en liquidación. En la vista Facturación se mantiene además el indicador de pendientes del periodo actual.

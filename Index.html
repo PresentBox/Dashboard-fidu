@@ -26,12 +26,8 @@
       <div class="bbva-mark" aria-label="BBVA Fidu Gestión">Λ</div>
       <nav class="sidebar-nav">
         <button id="btnHomeNav" class="sidebar-btn active" type="button" onclick="mostrarHome()" aria-label="Página principal"><i class="fa-solid fa-house"></i></button>
-        <button id="btnFolderNav" class="sidebar-btn" type="button" onclick="mostrarDashboard()" aria-label="Expedientes"><i class="fa-regular fa-folder-open"></i></button>
-        <button class="sidebar-btn" aria-label="Operación"><i class="fa-solid fa-chart-simple"></i></button>
-        <button class="sidebar-btn" aria-label="Prioridades"><i class="fa-solid fa-bars-staggered"></i></button>
-        <button class="sidebar-btn" aria-label="Usuarios"><i class="fa-solid fa-users"></i></button>
-        <button class="sidebar-btn" aria-label="Facturación"><i class="fa-solid fa-building-columns"></i></button>
-        <button class="sidebar-btn" aria-label="Reportes"><i class="fa-regular fa-file-lines"></i></button>
+        <button id="btnFolderNav" class="sidebar-btn" type="button" onclick="mostrarDashboard()" aria-label="Preliquidación"><i class="fa-regular fa-folder-open"></i></button>
+        <button id="btnNewBusinessNav" class="sidebar-btn" type="button" onclick="mostrarNuevoNegocio()" aria-label="Crear nuevo negocio"><i class="fa-solid fa-plus"></i></button>
       </nav>
       <button class="sidebar-help" aria-label="Ayuda"><i class="fa-regular fa-circle-question"></i></button>
     </aside>
@@ -42,16 +38,7 @@
           <span class="eyebrow">Página principal</span>
           <h1>Fidu Gestión</h1>
         </div>
-        <div class="topbar-actions">
-          <button class="round-icon" aria-label="Perfil y permisos"><i class="fa-regular fa-user"></i></button>
-          <button class="user-chip avatar-button" id="avatarButton" aria-label="Ver información de usuario"><span id="avatarLetra">U</span></button>
-          <div id="userMenu" class="user-menu hidden">
-            <div class="user-menu-avatar" id="avatarLetraMenu">U</div>
-            <strong id="userMenuName">Usuario</strong>
-            <span id="userMenuEmail">correo@bbva.com</span>
-            <small id="userMenuRole">Rol: -</small>
-          </div>
-        </div>
+
       </header>
 
       <div class="dashboard-layout">
@@ -85,6 +72,14 @@
                 <div class="metric-icon-crm metric-red"><i class="fa-solid fa-triangle-exclamation"></i></div>
                 <div><h4 id="m3">-</h4><p>Discrepancias Base</p></div>
               </article>
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-orange"><i class="fa-solid fa-circle-xmark"></i></div>
+                <div><h4 id="m5">-</h4><p>Contratos Inactivos</p></div>
+              </article>
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-yellow"><i class="fa-solid fa-hourglass-half"></i></div>
+                <div><h4 id="m6">-</h4><p>En Liquidación</p></div>
+              </article>
               <article id="metricFacturacion" class="metric-card-crm hidden">
                 <div class="metric-icon-crm metric-purple"><i class="fa-solid fa-file-circle-check"></i></div>
                 <div><h4 id="m4">-</h4><p>Pendientes periodo actual</p></div>
@@ -110,6 +105,29 @@
             </div>
 
             <div id="workspaceExpedientes" class="contracts-grid"></div>
+          </section>
+
+          <section id="newBusinessSection" class="crm-container hidden">
+            <div class="crm-toolbar">
+              <div>
+                <span class="eyebrow">Nuevo negocio</span>
+                <div class="crm-section-title">Crear negocio para preliquidación</div>
+              </div>
+            </div>
+            <form id="newBusinessForm" class="new-business-form">
+              <label><span>No. Radicación</span><input name="radicacion" required></label>
+              <label><span>Código FIDUSAP</span><input name="codigoFidusap"></label>
+              <label><span>Nombre del negocio</span><input name="nombreNegocio" required></label>
+              <label><span>Estado</span><select name="estado"><option>Activo</option><option>Inactivo</option><option>En Liquidación</option></select></label>
+              <label><span>Tipo general</span><input name="tipoGeneral" placeholder="FIJA / VARIABLE / OTRO"></label>
+              <label><span>Descripción de comisiones</span><textarea name="descripcionComisiones" rows="4"></textarea></label>
+              <label><span>Fecha de constitución</span><input name="fechaConstitucion" type="date"></label>
+              <label><span>Fecha de vigencia</span><input name="fechaVigencia" type="date"></label>
+              <label><span>Gerente BTM</span><input name="gerenteBtm" type="email" placeholder="gerente@bbva.com"></label>
+              <label><span>Profesional BTM</span><input name="profesionalBtm" type="email" placeholder="profesional@bbva.com"></label>
+              <label><span>Profesional especializado contable</span><input name="profesionalContable" type="email" placeholder="contador@bbva.com"></label>
+              <div class="new-business-actions"><button id="btnCrearNegocio" class="crm-btn crm-btn-primary" type="submit"><i class="fa-solid fa-plus"></i> Crear negocio</button></div>
+            </form>
           </section>
         </section>
 

@@ -31,6 +31,8 @@
     setText('m2', respuesta.metricas.totalVariables);
     setText('m3', respuesta.metricas.discrepancias);
     setText('m4', respuesta.metricas.pendientesFacturacionPeriodo || 0);
+    setText('m5', respuesta.metricas.totalInactivos || 0);
+    setText('m6', respuesta.metricas.totalEnLiquidacion || 0);
     document.getElementById('metricFacturacion').classList.toggle('hidden', !respuesta.esFacturacion);
     setText('userMenuName', obtenerNombreUsuario(respuesta.usuario));
     setText('userMenuEmail', respuesta.usuario);
@@ -50,7 +52,8 @@
     var botonGuardar = document.getElementById('btnGuardarLote');
     var botonRegistrarFacturacion = document.getElementById('btnRegistrarFacturacion');
     var botonEntrar = document.getElementById('btnEntrarApp');
-    var avatarButton = document.getElementById('avatarButton');
+    var newBusinessNav = document.getElementById('btnNewBusinessNav');
+    var newBusinessForm = document.getElementById('newBusinessForm');
     var homeNav = document.getElementById('btnHomeNav');
     var folderNav = document.getElementById('btnFolderNav');
 
@@ -59,7 +62,8 @@
     if (botonGuardar) botonGuardar.onclick = guardarLoteCompletoCRM;
     if (botonRegistrarFacturacion) botonRegistrarFacturacion.onclick = registrarPeriodoFacturado;
     if (botonEntrar) botonEntrar.onclick = entrarAplicacion;
-    if (avatarButton) avatarButton.onclick = alternarMenuUsuario;
+    if (newBusinessNav) newBusinessNav.onclick = mostrarNuevoNegocio;
+    if (newBusinessForm) newBusinessForm.onsubmit = crearNuevoNegocio;
     if (homeNav) homeNav.onclick = mostrarHome;
     if (folderNav) folderNav.onclick = mostrarDashboard;
   }
@@ -151,16 +155,20 @@
   function actualizarMetricasVista(contratos) {
     var metricas = contratos.reduce(function(acc, item) {
       if (normalizarEstado(item.estadoActual) === 'activo') acc.totalActivos++;
+      if (normalizarEstado(item.estadoActual) === 'inactivo') acc.totalInactivos++;
+      if (normalizarEstado(item.estadoActual) === 'en liquidacion') acc.totalEnLiquidacion++;
       if (item.esquemaComision === 'Variable') acc.totalVariables++;
       if (item.validacionSFC !== 'OK') acc.discrepancias++;
       if (cacheDatos.esFacturacion && normalizarEstado(item.estadoActual) === 'activo' && !item.facturadoPeriodoActual) acc.pendientesFacturacionPeriodo++;
       return acc;
-    }, { totalActivos: 0, totalVariables: 0, discrepancias: 0, pendientesFacturacionPeriodo: 0 });
+    }, { totalActivos: 0, totalVariables: 0, discrepancias: 0, pendientesFacturacionPeriodo: 0, totalInactivos: 0, totalEnLiquidacion: 0 });
 
     setText('m1', metricas.totalActivos);
     setText('m2', metricas.totalVariables);
     setText('m3', metricas.discrepancias);
     setText('m4', metricas.pendientesFacturacionPeriodo);
+    setText('m5', metricas.totalInactivos);
+    setText('m6', metricas.totalEnLiquidacion);
   }
 
   function debeMostrarContrato(item, vista, filterComision) {
@@ -778,6 +786,7 @@
     if (home) home.classList.add('hidden');
     if (sidebar) sidebar.classList.remove('hidden');
     if (app) app.classList.remove('hidden');
+    mostrarSeccionOperativa_('dashboard');
     setNavActivo_('btnFolderNav');
   }
 
@@ -792,14 +801,54 @@
   }
 
   function setNavActivo_(id) {
-    ['btnHomeNav', 'btnFolderNav'].forEach(function(btnId) {
+    ['btnHomeNav', 'btnFolderNav', 'btnNewBusinessNav'].forEach(function(btnId) {
       var btn = document.getElementById(btnId);
       if (btn) btn.classList.toggle('active', btnId === id);
     });
   }
 
-  function alternarMenuUsuario() {
-    document.getElementById('userMenu').classList.toggle('hidden');
+  function mostrarNuevoNegocio() {
+    if (!datosListosParaIngreso) return;
+    var home = document.getElementById('homeScreen');
+    var sidebar = document.getElementById('sidebarApp');
+    var app = document.getElementById('appShell');
+    if (home) home.classList.add('hidden');
+    if (sidebar) sidebar.classList.remove('hidden');
+    if (app) app.classList.remove('hidden');
+    mostrarSeccionOperativa_('nuevo');
+    setNavActivo_('btnNewBusinessNav');
+  }
+
+  function mostrarSeccionOperativa_(seccion) {
+    var crm = document.querySelector('.crm-container');
+    var nuevo = document.getElementById('newBusinessSection');
+    var toolbar = document.querySelector('.crm-container .crm-toolbar');
+    if (crm) crm.classList.toggle('hidden', seccion !== 'dashboard');
+    if (nuevo) nuevo.classList.toggle('hidden', seccion !== 'nuevo');
+  }
+
+  function crearNuevoNegocio(event) {
+    event.preventDefault();
+    var form = event.target;
+    var payload = {};
+    Array.prototype.forEach.call(form.elements, function(field) {
+      if (field.name) payload[field.name] = field.value;
+    });
+    var boton = document.getElementById('btnCrearNegocio');
+    if (boton) boton.disabled = true;
+    google.script.run
+      .withSuccessHandler(function(respuesta) {
+        alert(respuesta);
+        form.reset();
+        if (boton) boton.disabled = false;
+        cargarEcosistemaCRM();
+        mostrarDashboard();
+      })
+      .withFailureHandler(function(err) {
+        alert('Error al crear negocio: ' + err.message);
+        if (boton) boton.disabled = false;
+      })
+      .registrarNuevoNegocio(payload);
   }
 
   function obtenerNombreUsuario(email) {
