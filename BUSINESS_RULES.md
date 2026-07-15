@@ -205,7 +205,7 @@
 
 ## BR-21 — Nuevo negocio con asignación notificada
 
-- **Descripción:** Al crear un negocio, `Tipo general` debe ser `Fija` o `Variable`, pueden registrarse varios tipos de comisión sugeridos, se muestran campos/preview de cálculo para esos tipos y se notifica a gerente/profesional BTM asignados.
+- **Descripción:** Al crear un negocio, `Tipo general` debe ser `Fija` o `Variable`, pueden registrarse varios tipos de comisión sugeridos y se notifica a gerente/profesional BTM asignados.
 - **Archivo y función:** `Code.gs`, `registrarNuevoNegocio()`, `notifyAssignedBtmNewBusiness_()`; `Index.html`, formulario `newBusinessForm`; `JS.html`, `crearNuevoNegocio()`.
 - **Datos:** `control`, `CONT/BTM`, `Tabla de comisiones`.
 - **Resultado esperado:** El negocio queda creado con asignación BTM/contable y los BTM asignados reciben correo de aviso.

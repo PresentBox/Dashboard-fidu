@@ -329,7 +329,7 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 
 ## 23. Actualización de comportamiento — nuevo negocio y preliquidación por lote
 
-- El formulario Crear negocio permite seleccionar uno o varios tipos de comisión sugeridos, limita `Tipo general` a `Fija` o `Variable` y muestra los campos/preview de cálculo para los tipos seleccionados.
+- El formulario de nuevo negocio permite seleccionar uno o varios tipos de comisión sugeridos y limita `Tipo general` a `Fija` o `Variable`.
 - Los campos de asignación BTM/contable usan catálogos de correos existentes construidos desde `CONT/BTM`.
 - Al crear un negocio, el sistema notifica por correo al gerente BTM y profesional BTM asignados.
 - Los negocios inactivos o en liquidación se visualizan para el BTM asignado, pero la preliquidación queda bloqueada.

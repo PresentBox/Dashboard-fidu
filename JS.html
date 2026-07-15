@@ -215,6 +215,23 @@
     });
   }
 
+  function poblarCatalogosAsignacion(catalogos) {
+    poblarDatalist('gerentesBtmList', catalogos.gerentesBtm || []);
+    poblarDatalist('profesionalesBtmList', catalogos.profesionalesBtm || []);
+    poblarDatalist('profesionalesContablesList', catalogos.profesionalesContables || []);
+  }
+
+  function poblarDatalist(id, emails) {
+    var list = document.getElementById(id);
+    if (!list) return;
+    list.innerHTML = '';
+    emails.forEach(function(email) {
+      var option = document.createElement('option');
+      option.value = email;
+      list.appendChild(option);
+    });
+  }
+
   function asegurarFiltroComision() {
     var cajaSelector = document.querySelector('.profile-selector-box');
     if (!cajaSelector || document.getElementById('cmbFiltroComision')) return;
