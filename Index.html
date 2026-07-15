@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <?!= include('CSS'); ?>
+  </head>
+  <body>
+    <section id="homeScreen" class="home-screen">
+      <header class="home-nav">
+        <div class="home-brand">BBVA <span>CRM Fiduciaria</span></div>
+      </header>
+      <div class="home-hero">
+        <div class="home-hero-overlay">
+          <h1>CRM Fiduciaria BBVA</h1>
+          <button id="btnEntrarApp" type="button" class="home-entry-btn" onclick="entrarAplicacion()" disabled>
+            <i class="fa-solid fa-circle-notch fa-spin"></i> Cargando información...
+          </button>
+          <div id="homeStatus" class="home-status">Estamos validando tu usuario y conciliando la información.</div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="sidebar hidden" id="sidebarApp" aria-label="Navegación principal">
+      <div class="bbva-mark" aria-label="BBVA Fidu Gestión">Λ</div>
+      <nav class="sidebar-nav">
+        <button id="btnHomeNav" class="sidebar-btn active" type="button" onclick="mostrarHome()" aria-label="Página principal"><i class="fa-solid fa-house"></i></button>
+        <button id="btnFolderNav" class="sidebar-btn" type="button" onclick="mostrarDashboard()" aria-label="Preliquidación"><i class="fa-regular fa-folder-open"></i></button>
+        <button id="btnNewBusinessNav" class="sidebar-btn" type="button" onclick="mostrarNuevoNegocio()" aria-label="Crear nuevo negocio"><i class="fa-solid fa-plus"></i></button>
+      </nav>
+      <button class="sidebar-help" aria-label="Ayuda"><i class="fa-regular fa-circle-question"></i></button>
+    </aside>
+
+    <main class="app-shell hidden" id="appShell">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Página principal</span>
+          <h1>Fidu Gestión</h1>
+        </div>
+        <div class="profile-menu-wrapper">
+          <button class="profile-photo profile-trigger" id="profileToggle" type="button" aria-label="Ver perfil"><span id="profileInitial">U</span></button>
+          <div class="profile-summary-card hidden" id="profileSummaryCard">
+            <div class="profile-photo" id="profilePhoto"><span id="profileInitialMenu">U</span></div>
+            <div>
+              <strong id="profileName">Usuario</strong>
+              <span id="profileEmail">correo@bbva.com</span>
+              <small id="profileRole">Rol: -</small>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="dashboard-layout">
+        <section class="content-column">
+
+
+          <section id="panelAuditoriaAdmin" class="audit-card hidden">
+            <div>
+              <h3><i class="fa-solid fa-shield-halved"></i> Panel de Auditoría Operativa</h3>
+              <p>Inspecciona asignaciones de cualquier usuario digitando su correo institucional.</p>
+            </div>
+            <div class="audit-actions">
+              <input type="email" id="txtBuscarUsuario" placeholder="empleado@bbva.com">
+              <button id="btnAuditarUsuario" class="crm-btn crm-btn-primary"><i class="fa-solid fa-eye"></i> Inspeccionar</button>
+            </div>
+          </section>
+
+
+          <section class="metrics-section" aria-label="Indicadores principales">
+            <h2>Métricas de gestión</h2>
+            <div class="metrics-grid-crm">
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-blue"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+                <div><h4 id="m1">-</h4><p>Contratos Activos</p></div>
+              </article>
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-green"><i class="fa-solid fa-calculator"></i></div>
+                <div><h4 id="m2">-</h4><p>Variables</p></div>
+              </article>
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-teal"><i class="fa-solid fa-file-invoice"></i></div>
+                <div><h4 id="m7">-</h4><p>Fijos</p></div>
+              </article>
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-navy"><i class="fa-solid fa-layer-group"></i></div>
+                <div><h4 id="m8">-</h4><p>Total Fijos + Variables</p></div>
+              </article>
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-red"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <div><h4 id="m3">-</h4><p>Discrepancias Base</p></div>
+              </article>
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-orange"><i class="fa-solid fa-circle-xmark"></i></div>
+                <div><h4 id="m5">-</h4><p>Contratos Inactivos</p></div>
+              </article>
+              <article class="metric-card-crm">
+                <div class="metric-icon-crm metric-yellow"><i class="fa-solid fa-hourglass-half"></i></div>
+                <div><h4 id="m6">-</h4><p>En Liquidación</p></div>
+              </article>
+              <article id="metricFacturacion" class="metric-card-crm">
+                <div class="metric-icon-crm metric-purple"><i class="fa-solid fa-file-circle-check"></i></div>
+                <div><h4 id="m4">-</h4><p>Pendientes periodo actual</p></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="crm-container">
+            <div class="crm-toolbar">
+              <div>
+                <span class="eyebrow">Bandeja operativa</span>
+                <div class="crm-section-title" id="lblBandeja">Bandeja de Control y Trazabilidad</div>
+              </div>
+              <div class="profile-selector-box">
+                <select id="cmbPerfilVista" disabled>
+                  <option>Sincronizando Entorno...</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="loader" class="loading" role="status">
+              <i class="fa-solid fa-circle-notch fa-spin"></i> Conciliando bases de datos en tiempo récord...
+            </div>
+
+            <div id="workspaceExpedientes" class="contracts-grid"></div>
+          </section>
+
+          <section id="newBusinessSection" class="crm-container hidden">
+            <div class="crm-toolbar">
+              <div>
+                <span class="eyebrow">Nuevo negocio</span>
+                <div class="crm-section-title">Crear negocio para preliquidación</div>
+              </div>
+            </div>
+            <form id="newBusinessForm" class="new-business-form">
+              <label><span>No. Radicación</span><input name="radicacion" required></label>
+              <label><span>Código FIDUSAP</span><input name="codigoFidusap"></label>
+              <label><span>Nombre del negocio</span><input name="nombreNegocio" required></label>
+              <label><span>Estado</span><select name="estado"><option>Activo</option><option>Inactivo</option><option>En Liquidación</option></select></label>
+              <label><span>Tipo general</span><input name="tipoGeneral" placeholder="FIJA / VARIABLE / OTRO"></label>
+              <label><span>Tipo de comisión sugerido</span><select name="tipoComisionSugerida" id="newBusinessCommissionType"><option value="">Cargando tipos...</option></select></label>
+              <label><span>Descripción de comisiones</span><textarea name="descripcionComisiones" rows="4"></textarea></label>
+              <label><span>Fecha de constitución</span><input name="fechaConstitucion" type="date"></label>
+              <label><span>Fecha de vigencia</span><input name="fechaVigencia" type="date"></label>
+              <label><span>Gerente BTM</span><input name="gerenteBtm" type="email" placeholder="gerente@bbva.com"></label>
+              <label><span>Profesional BTM</span><input name="profesionalBtm" type="email" placeholder="profesional@bbva.com"></label>
+              <label><span>Profesional especializado contable</span><input name="profesionalContable" type="email" placeholder="contador@bbva.com"></label>
+              <div class="new-business-actions"><button id="btnCrearNegocio" class="crm-btn crm-btn-primary" type="submit"><i class="fa-solid fa-plus"></i> Crear negocio</button></div>
+            </form>
+          </section>
+        </section>
+
+      </div>
+
+      <div id="processOverlay" class="process-overlay hidden">
+        <div class="process-card"><i class="fa-solid fa-circle-notch fa-spin"></i><span id="processText">Procesando...</span></div>
+      </div>
+
+      <div id="facturacionActionBar" class="floating-batch-bar-crm hidden">
+        <div class="batch-summary">
+          <div class="batch-counter-badge-crm" id="txtFacturacionCount">0</div>
+          <div>Negocios seleccionados para marcar como facturados en el periodo actual</div>
+        </div>
+        <button id="btnRegistrarFacturacion" class="crm-btn save-batch-btn">
+          <i class="fa-solid fa-file-circle-check"></i> Registrar periodo facturado
+        </button>
+      </div>
+
+      <div id="floatingSaveBar" class="floating-batch-bar-crm hidden">
+        <div class="batch-summary">
+          <div class="batch-counter-badge-crm" id="txtLoteCount">0</div>
+          <div>Modificaciones pendientes en el lote actual</div>
+        </div>
+        <button id="btnGuardarLote" class="crm-btn save-batch-btn">
+          <i class="fa-solid fa-floppy-disk"></i> Guardar y Notificar Cambios
+        </button>
+      </div>
+    </main>
+
+    <?!= include('JS'); ?>
+  </body>
+</html>

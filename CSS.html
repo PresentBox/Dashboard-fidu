@@ -1,0 +1,205 @@
+<style>
+  :root {
+    --bbva-blue: #001391;
+    --bbva-navy: #020b5f;
+    --bbva-aqua: #5bbeff;
+    --bbva-sky: #d8ecff;
+    --bbva-orange: #ffb15c;
+    --bbva-yellow: #ffde55;
+    --bg-gray: #f3f4f6;
+    --card: #ffffff;
+    --muted: #5d668a;
+    --border-color: #edf0f4;
+    --success: #0c7a27;
+    --danger: #c5221f;
+    --warning: #b06000;
+    --shadow-soft: 0 18px 45px rgba(4, 17, 90, 0.06);
+  }
+
+
+  .home-screen { width: 100%; min-height: 100vh; padding: 24px; background: #f3f4f6; display: flex; flex-direction: column; gap: 26px; }
+  .home-nav { background: #fff; border-radius: 18px; min-height: 100px; display: flex; align-items: center; justify-content: center; padding: 0 12%; box-shadow: var(--shadow-soft); }
+  .home-brand { color: var(--bbva-blue); font-size: 48px; font-weight: 900; letter-spacing: -0.06em; }
+  .home-brand span { border-left: 1px solid #b9c3d2; font-size: 18px; letter-spacing: 0; margin-left: 16px; padding-left: 16px; vertical-align: middle; }
+  .home-hero { border-radius: 18px; min-height: 630px; overflow: hidden; background: linear-gradient(120deg, rgba(0,19,145,0.75), rgba(2,11,95,0.25)), radial-gradient(circle at 24% 38%, rgba(255,177,92,0.75), transparent 28%), linear-gradient(135deg, #855f5f 0%, #d8ecff 52%, #f8f4ec 100%); box-shadow: var(--shadow-soft); display: grid; place-items: center; text-align: center; }
+  .home-hero-overlay { color: #fff; max-width: 980px; padding: 48px; text-shadow: 0 4px 18px rgba(0,0,0,0.28); }
+  .home-hero-overlay h1 { font-family: 'BBVA Benton Sans', 'Benton Sans', Arial, sans-serif; font-size: clamp(46px, 7vw, 92px); font-weight: 900; letter-spacing: -0.045em; line-height: 0.98; margin: 0 0 34px; }
+  .home-entry-btn { border: 0; border-radius: 14px; background: #fff; color: var(--bbva-blue); cursor: pointer; font-size: 16px; font-weight: 900; padding: 17px 28px; box-shadow: 0 18px 45px rgba(0,0,0,0.18); }
+  .home-entry-btn:disabled { cursor: not-allowed; opacity: 0.72; }
+  .home-status { color: #eef4ff; font-weight: 700; margin-top: 18px; }
+  .avatar-button { border: 0; cursor: pointer; }
+  .topbar-actions { position: relative; }
+  .user-menu { position: absolute; right: 0; top: 62px; z-index: 50; width: 280px; background: #fff; border: 1px solid var(--border-color); border-radius: 18px; box-shadow: 0 24px 60px rgba(4,17,90,0.16); padding: 18px; display: grid; gap: 8px; color: var(--bbva-navy); }
+  .user-menu-avatar { width: 46px; height: 46px; border-radius: 50%; background: var(--bbva-orange); display: grid; place-items: center; font-weight: 900; }
+  .user-menu span, .user-menu small { color: var(--muted); overflow-wrap: anywhere; }
+
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; min-height: 100vh; background: var(--bg-gray); color: var(--bbva-navy); display: flex; overflow: hidden; }
+  .hidden { display: none !important; }
+
+  .sidebar { width: 92px; background: var(--card); border-right: 1px solid #eef1f5; display: flex; flex-direction: column; align-items: center; padding: 24px 0 18px; gap: 24px; }
+  .bbva-mark { color: var(--bbva-blue); font-size: 46px; line-height: 1; font-weight: 700; transform: scaleX(0.9); }
+  .sidebar-nav { display: flex; flex-direction: column; align-items: center; gap: 16px; flex: 1; }
+  .sidebar-btn, .sidebar-help, .round-icon { border: 0; background: transparent; color: var(--bbva-blue); cursor: pointer; display: grid; place-items: center; }
+  .sidebar-btn { width: 42px; height: 42px; border-radius: 50%; font-size: 17px; }
+  .sidebar-btn.active { background: var(--bbva-blue); color: #fff; box-shadow: 0 8px 22px rgba(0, 19, 145, 0.24); }
+  .sidebar-btn:hover, .sidebar-help:hover, .round-icon:hover { background: #f1f5ff; }
+  .sidebar-help { width: 34px; height: 34px; border-radius: 50%; color: #c47a00; }
+
+  .app-shell { flex: 1; min-width: 0; height: 100vh; overflow-y: auto; padding: 28px 44px 110px 26px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 34px; }
+  .eyebrow { display: inline-flex; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.02em; margin-bottom: 6px; }
+  .topbar h1 { margin: 0; font-size: 20px; color: var(--bbva-navy); }
+  .topbar-actions { display: flex; align-items: center; gap: 16px; }
+  .round-icon { width: 46px; height: 46px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-soft); font-size: 18px; }
+  .user-chip, .avatar-large { background: var(--bbva-orange); color: var(--bbva-navy); border-radius: 50%; display: grid; place-items: center; font-weight: 700; }
+  .user-chip { width: 52px; height: 52px; }
+
+  .profile-menu-wrapper { position: relative; }
+  .profile-trigger { border: 0; cursor: pointer; font-size: 14px; }
+  .profile-summary-card { position: absolute; top: 58px; right: 0; z-index: 50; background: #fff; border-radius: 18px; box-shadow: var(--shadow-soft); padding: 16px; display: flex; align-items: center; gap: 12px; min-width: 390px; }
+  .profile-summary-card strong, .profile-summary-card span, .profile-summary-card small { display: block; }
+  .profile-summary-card strong { color: var(--bbva-navy); font-size: 14px; }
+  .profile-summary-card span { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .profile-summary-card small { color: var(--bbva-blue); font-weight: 800; margin-top: 4px; }
+  .profile-photo { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 900; box-shadow: 0 10px 25px rgba(0,0,0,0.10); }
+  .profile-admin { background: linear-gradient(135deg,#001391,#2dcccd); }
+  .profile-billing { background: linear-gradient(135deg,#6f2dbd,#f3e8ff); color: var(--bbva-navy); }
+  .profile-manager { background: linear-gradient(135deg,#004481,#49a5e6); }
+  .profile-professional { background: linear-gradient(135deg,#19733f,#7bdcb5); }
+  .profile-default { background: #ffb45b; color: var(--bbva-navy); }
+
+  .dashboard-layout { display: block; }
+  .content-column { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 30px; }
+  .profile-hero { display: none !important; }
+  .avatar-large { width: 56px; height: 56px; background: var(--bbva-orange); font-size: 18px; flex: 0 0 auto; }
+  .profile-copy { min-width: 0; }
+  .profile-title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .profile-title-row h2 { margin: 0; font-size: 22px; color: var(--bbva-navy); }
+  .profile-copy p { margin: 8px 0 0; color: var(--bbva-navy); font-size: 14px; }
+  .session-line { color: var(--muted) !important; }
+  .status-pill { color: var(--success); border: 1px solid #cbe8d0; background: #f4fff5; border-radius: 999px; padding: 3px 10px; font-style: italic; font-size: 13px; }
+
+  .audit-card { background: var(--bbva-sky); border-radius: 16px; color: var(--bbva-navy); display: flex; gap: 16px; box-shadow: var(--shadow-soft); }
+  .audit-card { justify-content: space-between; align-items: center; padding: 20px 24px; }
+  .audit-card h3 { margin: 0 0 6px; font-size: 16px; }
+  .audit-card p { margin: 0; color: var(--bbva-navy); line-height: 1.45; }
+  .audit-actions { display: flex; gap: 10px; align-items: center; }
+  .audit-actions input { padding: 12px 14px; font-size: 13px; border: 1px solid transparent; border-radius: 10px; width: 240px; color: var(--bbva-navy); }
+
+  .section-heading, .crm-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; }
+  .section-heading h2, .metrics-section h2, .interest-section h2 { margin: 0; color: var(--bbva-navy); font-size: 22px; }
+  .utility-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+  .utility-card { background: var(--card); border-radius: 16px; padding: 28px 24px; min-height: 170px; box-shadow: var(--shadow-soft); }
+  .utility-card i { color: var(--bbva-blue); font-size: 25px; margin-bottom: 22px; }
+  .utility-card h3 { margin: 0 0 18px; font-size: 16px; color: var(--bbva-blue); }
+  .utility-card p { margin: 0; color: var(--bbva-navy); line-height: 1.5; }
+
+  .profile-selector-box { display: flex; gap: 10px; align-items: center; }
+  .profile-selector-box select { padding: 11px 15px; font-size: 12px; font-weight: 700; border-radius: 12px; border: 1px solid transparent; color: var(--bbva-blue); cursor: pointer; background: #fff; box-shadow: var(--shadow-soft); }
+
+  .metrics-grid-crm { display: grid; grid-template-columns: repeat(8, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
+  .metric-card-crm { background: var(--card); border-radius: 14px; padding: 12px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow-soft); min-height: 78px; }
+  .metric-icon-crm { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .metric-blue { background: #e7f4ff; color: #108ad8; }
+  .metric-green { background: #e9f8ef; color: var(--success); }
+  .metric-red { background: #ffeceb; color: var(--danger); }
+  .metric-purple { background: #f3e8ff; color: #6f2dbd; }
+  .metric-orange { background: #fff1e6; color: #c65300; }
+  .metric-yellow { background: #fff8d8; color: #9c6f00; }
+  .metric-teal { background: #e5fbfa; color: #008c8c; }
+  .metric-navy { background: #e8f0ff; color: var(--bbva-navy); }
+  .metric-card-crm h4 { margin: 0; font-size: 18px; color: var(--bbva-navy); }
+  .metric-card-crm p { margin: 3px 0 0; font-size: 10px; color: var(--muted); font-weight: 700; }
+
+  .crm-container { position: relative; }
+  .crm-section-title { font-size: 22px; font-weight: 800; color: var(--bbva-navy); }
+  .contracts-grid { display: grid; gap: 16px; }
+  .crm-card-file { background: var(--card); border-radius: 18px; padding: 20px; box-shadow: var(--shadow-soft); border: 1px solid transparent; display: flex; flex-direction: column; gap: 14px; transition: transform 0.18s ease, border-color 0.18s ease; }
+  .crm-card-file:hover { transform: translateY(-2px); }
+  .crm-card-file.changed-pending-crm { border-color: #25d366; background: #f6fff9; }
+  .crm-card-row { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 14px; }
+  .rad-id { font-weight: 800; color: var(--bbva-blue); font-size: 15px; min-width: 120px; }
+  .negocio-name { font-weight: 800; margin: 0 0 4px; font-size: 15px; color: var(--bbva-navy); }
+  .negocio-sub { color: var(--muted); font-size: 12px; margin: 0; }
+  .info-meta-box { background: #f7f8fa; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border-color); font-size: 12px; display: flex; flex-direction: column; gap: 6px; width: 100%; color: var(--bbva-navy); }
+
+  .operation-data-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; background: #f7f8fa; border: 1px solid var(--border-color); border-radius: 14px; padding: 14px; }
+  .operation-field { background: #fff; border-radius: 10px; border: 1px solid #edf0f4; padding: 10px 12px; min-height: 62px; }
+  .operation-field span { display: block; color: var(--muted); font-size: 11px; font-weight: 800; margin-bottom: 6px; text-transform: uppercase; }
+  .operation-field strong { color: var(--bbva-navy); display: block; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+  .preliquidation-box { border: 1px solid #b9c3d2; border-radius: 12px; overflow: hidden; background: #fff; }
+  .preliquidation-title { background: var(--bbva-navy); color: #fff; font-weight: 800; padding: 10px 14px; display: flex; gap: 8px; align-items: center; }
+  .preliquidation-columns { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: #eef2f8; }
+  .preliquidation-columns div { border-right: 1px solid #b9c3d2; color: var(--bbva-navy); font-size: 12px; font-weight: 700; min-height: 42px; padding: 10px; }
+  .preliquidation-columns div:last-child { border-right: 0; }
+
+  .contract-details.collapsed { display: none; }
+  .card-toggle-btn { border: 1px solid var(--border-color); background: #fff; color: var(--bbva-blue); border-radius: 10px; padding: 9px 12px; font-size: 12px; font-weight: 800; cursor: pointer; }
+  .preliquidated-card { border-color: #b7e4c7; background: #fbfffc; }
+  .preliquidation-title { justify-content: space-between; }
+  .preliquidation-status { background: rgba(255,255,255,0.18); border-radius: 999px; padding: 4px 10px; font-size: 11px; text-transform: uppercase; }
+  .preliquidation-summary { padding: 12px 14px; display: grid; gap: 8px; color: var(--muted); font-size: 12px; }
+  .preliquidation-chip { border: 1px solid #edf0f4; border-radius: 12px; background: #f7f8fa; padding: 10px 12px; display: flex; justify-content: space-between; gap: 10px; align-items: center; color: var(--bbva-navy); flex-wrap: wrap; }
+  .preliquidation-chip strong { color: var(--bbva-navy); }
+  .preliquidation-form { border-top: 1px solid #edf0f4; padding: 14px; display: grid; gap: 12px; }
+  .preliq-type-select { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; color: var(--bbva-blue); font-weight: 800; background: #fff; }
+  .preliq-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .preliq-field { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+  .preliq-field input { padding: 9px 10px; border: 1px solid var(--border-color); border-radius: 10px; color: var(--bbva-navy); font-weight: 700; }
+  .preliq-total-preview { color: var(--bbva-navy); font-weight: 900; background: #eef6ff; border-radius: 12px; padding: 12px 14px; }
+  .preliq-help { color: var(--muted); font-size: 12px; line-height: 1.45; }
+  .preliq-pending-list { display: grid; gap: 8px; }
+  .mini-remove-btn { border: 0; border-radius: 8px; background: #ffeceb; color: var(--danger); font-size: 11px; font-weight: 800; padding: 7px 10px; cursor: pointer; }
+  .commission-description-box { font-size: 13px; line-height: 1.45; }
+
+
+  .badge { padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; text-transform: uppercase; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .badge-ok { background: #e6f4ea; color: var(--success); }
+  .badge-alert { background: #fce8e6; color: var(--danger); }
+  .billing-check-row { background: #eef6ff; border: 1px solid #c9e2ff; border-radius: 12px; color: var(--bbva-navy); cursor: pointer; font-size: 12px; font-weight: 700; padding: 12px 14px; }
+  .billing-check-row input { margin-right: 8px; }
+  .select-estado-sfc, .crm-input { padding: 9px 10px; font-size: 12px; border-radius: 10px; border: 1px solid var(--border-color); font-weight: 700; color: var(--bbva-blue); background: white; }
+  .select-estado-sfc { cursor: pointer; }
+  .crm-input { width: 140px; text-align: right; }
+  .crm-btn { border: none; padding: 10px 16px; border-radius: 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
+  .crm-btn-primary { background: var(--bbva-blue); color: white; }
+  .close-liquidation-btn { background: #d8ecff; color: var(--bbva-blue); }
+  .crm-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+
+  .new-business-form { background: #fff; border-radius: 18px; box-shadow: var(--shadow-soft); padding: 22px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .new-business-form label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+  .new-business-form input, .new-business-form select, .new-business-form textarea { border: 1px solid var(--border-color); border-radius: 12px; color: var(--bbva-navy); font-weight: 700; padding: 11px 12px; font-family: inherit; resize: vertical; }
+  .new-business-form label:nth-child(7) { grid-column: span 3; }
+  .new-business-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+
+
+  .process-overlay { position: fixed; inset: 0; background: rgba(2,11,95,0.22); display: grid; place-items: center; z-index: 2000; }
+  .process-card { background: #fff; color: var(--bbva-navy); border-radius: 18px; box-shadow: 0 18px 45px rgba(0,0,0,0.22); padding: 20px 26px; display: flex; align-items: center; gap: 12px; font-weight: 900; }
+  .process-card i { color: var(--bbva-blue); font-size: 22px; }
+
+  .floating-batch-bar-crm { position: fixed; bottom: 25px; right: 44px; left: 118px; background: var(--bbva-navy); border-radius: 16px; padding: 15px 25px; box-shadow: 0 18px 45px rgba(0,0,0,0.22); display: flex; justify-content: space-between; align-items: center; z-index: 999; animation: slideUp 0.3s ease-out; color: white; font-size: 14px; font-weight: 600; }
+  .batch-summary { display: flex; align-items: center; gap: 12px; }
+  .batch-counter-badge-crm { width: 34px; height: 34px; background: #25d366; color: white; font-weight: 800; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .save-batch-btn { background: #25d366; color: white; padding: 11px 20px; }
+  .loading { text-align: center; padding: 40px; color: var(--muted); font-style: italic; font-size: 14px; }
+
+  @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  @media (max-width: 1180px) {
+    .utility-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .metrics-grid-crm { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 760px) {
+    body { overflow: auto; }
+    .sidebar { display: none; }
+    .app-shell { height: auto; padding: 22px 18px 110px; }
+    .profile-hero, .audit-card, .crm-card-row, .section-heading { flex-direction: column; align-items: stretch; }
+    .utility-grid, .operation-data-grid, .preliquidation-columns, .preliq-fields, .new-business-form { grid-template-columns: 1fr; }
+    .new-business-form label:nth-child(7), .new-business-actions { grid-column: auto; }
+
+  .floating-batch-bar-crm { left: 18px; right: 18px; flex-direction: column; gap: 12px; align-items: stretch; }
+  }
+</style>
