@@ -325,3 +325,13 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 4. Crear pruebas controladas para cada tipo de comisión.
 5. Confirmar si `ejecutarAccionServidor()` debe persistir una liquidación formal.
 6. Evaluar mover parámetros como URL, admins bootstrap y corte de periodo a configuración externa.
+
+
+## 23. Actualización de comportamiento — nuevo negocio y preliquidación por lote
+
+- El formulario de nuevo negocio permite seleccionar uno o varios tipos de comisión sugeridos y limita `Tipo general` a `Fija` o `Variable`.
+- Los campos de asignación BTM/contable usan catálogos de correos existentes construidos desde `CONT/BTM`.
+- Al crear un negocio, el sistema notifica por correo al gerente BTM y profesional BTM asignados.
+- Los negocios inactivos o en liquidación se visualizan para el BTM asignado, pero la preliquidación queda bloqueada.
+- El BTM actualmente asignado puede reasignar temporalmente gerente/profesional BTM desde la tarjeta del negocio.
+- El frontend permite preparar preliquidaciones de uno o varios negocios y guardarlas en un lote general.
