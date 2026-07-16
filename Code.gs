@@ -3,7 +3,7 @@
 // ============================================================================
 const CONFIG = {
   APP_TITLE: 'Fidu Gestión - CRM Lotes',
-  APP_VERSION: '0.2.10',
+  APP_VERSION: '0.2.11',
   SHEETS: {
     CONTROL: 'control',
     BTM: 'CONT/BTM',
@@ -577,6 +577,7 @@ function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesA
         validacionSFC: estadoValidacion,
         estadoActual: estadoControl,
         facturadoPeriodoActual: facturadoPeriodoActual,
+        facturacionPeriodoActual: facturadosPeriodoActual[radicacionKey] || null,
         liquidacionCerradaPeriodoActual: liquidacionCerradaPeriodoActual,
         preliquidadoPeriodoActual: preliquidadoPeriodoActual,
         preliquidacionesPeriodoActual: preliquidacionesContrato,
@@ -814,7 +815,20 @@ function buildCurrentPeriodBillingMap_(book) {
   for (var row = 1; row < values.length; row++) {
     var period = normalizePeriodValue_(values[row][1]);
     var radicacion = normalizeKey_(values[row][2]);
-    if (period === currentPeriod && radicacion) map[radicacion] = true;
+    if (period === currentPeriod && radicacion) {
+      map[radicacion] = {
+        fechaRegistro: formatSheetDate_(values[row][0]),
+        periodo: period,
+        radicacion: toCleanString_(values[row][2]),
+        usuario: toCleanString_(values[row][3]),
+        estado: toCleanString_(values[row][4]) || 'FACTURADO',
+        codigoFidusap: toCleanString_(values[row][5]),
+        fechaFacturacion: formatSheetDate_(values[row][6]),
+        valorFacturado: Number(values[row][7]) || 0,
+        facturaFidusap: toCleanString_(values[row][8]),
+        cufe: toCleanString_(values[row][9])
+      };
+    }
   }
   return map;
 }
@@ -938,29 +952,144 @@ function registrarPreliquidacionesContrato(paquetes) {
 }
 
 /**
- * Facturación deja en firme una preliquidación cuando registra la factura en FIDUSAP.
- * @param {string} preliquidacionId
- * @param {string} facturaFidusap
- * @return {string}
+ * Compatibilidad con clientes antiguos. La facturación ya no se confirma por línea.
  */
-function confirmarPreliquidacionFacturada(preliquidacionId, facturaFidusap) {
-  var book = SpreadsheetApp.getActiveSpreadsheet();
-  var email = getCurrentUserEmail_();
-  var perfiles = getAdditionalProfiles_(book, email);
-  if (!isSuperAdmin_(email, perfiles) && perfiles.indexOf(ROLES.FACTURACION) === -1) {
-    throw new Error('Solo Facturación puede dejar en firme la preliquidación facturada.');
+function confirmarPreliquidacionFacturada() {
+  throw new Error('La facturación ahora se registra por negocio completo. Actualiza la aplicación y usa Registrar factura del negocio.');
+}
+
+/**
+ * Registra una factura consolidada para todas las preliquidaciones del negocio en el periodo actual.
+ * @param {Object} payload Datos de factura del negocio.
+ * @return {Object}
+ */
+function registrarFacturacionNegocio(payload) {
+  return registrarFacturacionesNegocio_([payload], false);
+}
+
+/**
+ * Importa facturas consolidadas previamente leídas desde un CSV en el frontend.
+ * @param {Object[]} registros Filas normalizadas del archivo.
+ * @return {Object}
+ */
+function importarFacturacionMasiva(registros) {
+  return registrarFacturacionesNegocio_(registros, true);
+}
+
+function registrarFacturacionesNegocio_(registros, esImportacion) {
+  if (!Array.isArray(registros) || registros.length === 0) {
+    throw new Error('No hay registros de facturación para procesar.');
   }
-  var sheet = getOrCreatePreliquidationSheet_(book);
-  var data = sheet.getDataRange().getValues();
-  for (var row = 1; row < data.length; row++) {
-    if (toCleanString_(data[row][2]) === toCleanString_(preliquidacionId)) {
-      sheet.getRange(row + 1, 13).setValue('FACTURADA');
-      sheet.getRange(row + 1, 14).setValue(toCleanString_(facturaFidusap) || 'FIDUSAP registrado');
-      sheet.getRange(row + 1, 15).setValue(email);
-      return '✅ Preliquidación marcada como facturada en FIDUSAP.';
+
+  var lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    var book = SpreadsheetApp.getActiveSpreadsheet();
+    var email = getCurrentUserEmail_();
+    var perfiles = getAdditionalProfiles_(book, email);
+    if (!isSuperAdmin_(email, perfiles) && perfiles.indexOf(ROLES.FACTURACION) === -1) {
+      throw new Error('Solo el perfil Facturación puede registrar facturas.');
     }
+
+    var sheets = getRequiredSheets_(book);
+    var controlRows = buildControlRowsMap_(sheets.control.getDataRange().getValues());
+    var preSheet = getOrCreatePreliquidationSheet_(book);
+    ensurePreliquidationBillingColumns_(preSheet);
+    var preValues = preSheet.getRange(1, 1, preSheet.getLastRow(), 18).getValues();
+    var billingSheet = getOrCreateBillingSheet_(book);
+    var facturadosPeriodo = buildCurrentPeriodBillingMap_(book);
+    var periodoActual = getCurrentBillingPeriod_();
+    var now = new Date();
+    var billingRows = [];
+    var keysProcesadas = {};
+
+    registros.forEach(function(raw, index) {
+      var payload = raw || {};
+      var radicacion = toCleanString_(payload.radicacion);
+      var key = normalizeKey_(radicacion);
+      var prefijo = esImportacion ? 'Fila ' + (index + 2) + ': ' : '';
+      if (!key) throw new Error(prefijo + 'la radicación es obligatoria.');
+      if (keysProcesadas[key]) throw new Error(prefijo + 'la radicación ' + radicacion + ' está repetida en el archivo.');
+      if (facturadosPeriodo[key]) throw new Error(prefijo + 'la radicación ' + radicacion + ' ya está facturada en ' + periodoActual + '.');
+
+      var controlRow = controlRows[key];
+      if (!controlRow) throw new Error(prefijo + 'la radicación ' + radicacion + ' no existe en control.');
+      var codigoControl = toCleanString_(controlRow[CONFIG.CONTROL_COLS.CODIGO_FIDUSAP]);
+      var codigoArchivo = toCleanString_(payload.codigoFidusap);
+      if (codigoArchivo && normalizeKey_(codigoArchivo) !== normalizeKey_(codigoControl)) {
+        throw new Error(prefijo + 'el Código FIDUSAP no coincide con control para la radicación ' + radicacion + '.');
+      }
+
+      var periodo = normalizePeriodValue_(payload.periodo || periodoActual);
+      if (periodo !== periodoActual) {
+        throw new Error(prefijo + 'el periodo debe ser ' + periodoActual + '.');
+      }
+      var factura = toCleanString_(payload.facturaFidusap);
+      var cufe = toCleanString_(payload.cufe);
+      if (!factura) throw new Error(prefijo + 'el número de factura FIDUSAP es obligatorio.');
+      if (!cufe) throw new Error(prefijo + 'el CUFE es obligatorio.');
+      var fechaFacturacion = parseRequiredBillingDate_(payload.fechaFacturacion, prefijo);
+
+      var indicesPreliquidacion = [];
+      var totalPreliquidado = 0;
+      for (var row = 1; row < preValues.length; row++) {
+        if (normalizePeriodValue_(preValues[row][1]) !== periodo || normalizeKey_(preValues[row][3]) !== key) continue;
+        indicesPreliquidacion.push(row);
+        totalPreliquidado += Number(preValues[row][10]) || 0;
+      }
+      if (indicesPreliquidacion.length === 0) {
+        throw new Error(prefijo + 'no existen preliquidaciones del periodo para la radicación ' + radicacion + '.');
+      }
+
+      var valorInformado = parseNumber_(payload.valorFacturado);
+      if (valorInformado <= 0) throw new Error(prefijo + 'el valor facturado debe ser mayor que cero.');
+      if (Math.round(valorInformado) !== Math.round(totalPreliquidado)) {
+        throw new Error(prefijo + 'el valor facturado (' + valorInformado + ') no coincide con el total preliquidado (' + totalPreliquidado + ').');
+      }
+
+      indicesPreliquidacion.forEach(function(preRow) {
+        preValues[preRow][12] = 'FACTURADA';
+        preValues[preRow][13] = factura;
+        preValues[preRow][14] = email;
+        preValues[preRow][16] = cufe;
+        preValues[preRow][17] = fechaFacturacion;
+      });
+      billingRows.push([now, periodo, radicacion, email, 'FACTURADO', codigoControl, fechaFacturacion, Math.round(totalPreliquidado), factura, cufe]);
+      keysProcesadas[key] = true;
+    });
+
+    var primeraFilaFacturacion = billingSheet.getLastRow() + 1;
+    billingSheet.getRange(primeraFilaFacturacion, 1, billingRows.length, 10).setValues(billingRows);
+    try {
+      if (preValues.length > 1) {
+        preSheet.getRange(2, 1, preValues.length - 1, 18).setValues(preValues.slice(1));
+      }
+    } catch (writeError) {
+      billingSheet.deleteRows(primeraFilaFacturacion, billingRows.length);
+      throw writeError;
+    }
+    SpreadsheetApp.flush();
+
+    return {
+      cantidad: billingRows.length,
+      periodo: periodoActual,
+      mensaje: '✅ Se registraron ' + billingRows.length + ' negocio(s) facturado(s) para el periodo ' + periodoActual + '.'
+    };
+  } finally {
+    lock.releaseLock();
   }
-  throw new Error('No se encontró la preliquidación indicada.');
+}
+
+function parseRequiredBillingDate_(value, prefijo) {
+  var text = toCleanString_(value);
+  if (!text) throw new Error((prefijo || '') + 'la fecha de facturación es obligatoria.');
+  var match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) throw new Error((prefijo || '') + 'la fecha de facturación debe usar formato AAAA-MM-DD.');
+  var date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (date.getFullYear() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1 || date.getDate() !== Number(match[3])) {
+    throw new Error((prefijo || '') + 'la fecha de facturación no es válida.');
+  }
+  return date;
 }
 
 function registrarCierreLiquidacionMensual(radicaciones) {
@@ -1024,13 +1153,19 @@ function getOrCreatePreliquidationSheet_(book) {
   var sheet = book.getSheetByName(CONFIG.SHEETS.PRELIQUIDACIONES);
   if (!sheet) {
     sheet = book.insertSheet(CONFIG.SHEETS.PRELIQUIDACIONES);
-    sheet.getRange(1, 1, 1, 16).setValues([[
+    sheet.getRange(1, 1, 1, 18).setValues([[
       'fecha_registro', 'periodo', 'id', 'radicacion', 'codigo_fidusap', 'nombre_negocio',
       'tipo_comision', 'valores_json', 'subtotal', 'iva', 'total', 'usuario_preliquida',
-      'estado_preliquidacion', 'factura_fidusap', 'usuario_factura', 'descripcion_comision'
+      'estado_preliquidacion', 'factura_fidusap', 'usuario_factura', 'descripcion_comision',
+      'cufe', 'fecha_facturacion'
     ]]);
   }
   return sheet;
+}
+
+function ensurePreliquidationBillingColumns_(sheet) {
+  if (sheet.getMaxColumns() < 18) sheet.insertColumnsAfter(sheet.getMaxColumns(), 18 - sheet.getMaxColumns());
+  sheet.getRange(1, 17, 1, 2).setValues([['cufe', 'fecha_facturacion']]);
 }
 
 function buildCurrentPeriodPreliquidationMap_(book) {
@@ -1055,7 +1190,9 @@ function buildCurrentPeriodPreliquidationMap_(book) {
       total: Number(values[row][10]) || 0,
       usuario: toCleanString_(values[row][11]),
       estado: toCleanString_(values[row][12]) || 'PRELIQUIDADA',
-      facturaFidusap: toCleanString_(values[row][13])
+      facturaFidusap: toCleanString_(values[row][13]),
+      cufe: toCleanString_(values[row][16]),
+      fechaFacturacion: formatSheetDate_(values[row][17])
     });
   }
   return map;
@@ -1270,49 +1407,21 @@ function buildControlRowsMap_(datosControl) {
 }
 
 function registrarFacturacionPeriodo(radicaciones) {
-  var book = SpreadsheetApp.getActiveSpreadsheet();
-  var email = getCurrentUserEmail_();
-  var perfiles = getAdditionalProfiles_(book, email);
-  if (!isSuperAdmin_(email, perfiles) && perfiles.indexOf(ROLES.FACTURACION) === -1) {
-    throw new Error('Solo el perfil Facturación puede registrar periodos facturados.');
-  }
-
-  if (!Array.isArray(radicaciones) || radicaciones.length === 0) {
-    throw new Error('Selecciona al menos un negocio para marcar como facturado.');
-  }
-
-  var sheets = getRequiredSheets_(book);
-  var datosControl = sheets.control.getDataRange().getValues();
-  var estadosControl = buildControlStatusMap_(datosControl);
-  var facturadosPeriodo = buildCurrentPeriodBillingMap_(book);
-  var sheetFacturacion = getOrCreateBillingSheet_(book);
-  var period = getCurrentBillingPeriod_();
-  var now = new Date();
-  var rows = [];
-
-  radicaciones.forEach(function(radicacion) {
-    var clean = toCleanString_(radicacion);
-    var key = normalizeKey_(clean);
-    if (!clean || facturadosPeriodo[key]) return;
-    if ((estadosControl[key] || '').toLowerCase() !== 'activo') {
-      throw new Error('La radicación ' + clean + ' no está activa y no puede marcarse como facturada.');
-    }
-    rows.push([now, period, clean, email, 'Facturado']);
-  });
-
-  if (rows.length > 0) {
-    sheetFacturacion.getRange(sheetFacturacion.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-  }
-
-  return '✅ Se registraron ' + rows.length + ' negocios como facturados para el periodo ' + period + '.';
+  throw new Error('Este flujo fue reemplazado por la facturación consolidada del negocio. Registra factura, CUFE, fecha y valor desde la vista Facturación.');
 }
 
 function getOrCreateBillingSheet_(book) {
   var sheet = book.getSheetByName(CONFIG.SHEETS.FACTURACION);
   if (!sheet) {
     sheet = book.insertSheet(CONFIG.SHEETS.FACTURACION);
-    sheet.getRange(1, 1, 1, 5).setValues([['fecha_registro', 'periodo', 'radicacion', 'usuario', 'estado_facturacion']]);
   }
+  if (sheet.getMaxColumns() < 10) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), 10 - sheet.getMaxColumns());
+  }
+  sheet.getRange(1, 1, 1, 10).setValues([[
+    'fecha_registro', 'periodo', 'radicacion', 'usuario', 'estado_facturacion',
+    'codigo_fidusap', 'fecha_facturacion', 'valor_facturado', 'factura_fidusap', 'cufe'
+  ]]);
   return sheet;
 }
 

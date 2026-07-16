@@ -161,8 +161,23 @@
   .badge { padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; text-transform: uppercase; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
   .badge-ok { background: #e6f4ea; color: var(--success); }
   .badge-alert { background: #fce8e6; color: var(--danger); }
-  .billing-check-row { background: #eef6ff; border: 1px solid #c9e2ff; border-radius: 12px; color: var(--bbva-navy); cursor: pointer; font-size: 12px; font-weight: 700; padding: 12px 14px; }
-  .billing-check-row input { margin-right: 8px; }
+  .billing-business-form { background: #eef6ff; border: 1px solid #c9e2ff; border-radius: 14px; color: var(--bbva-navy); display: grid; gap: 14px; padding: 16px; }
+  .billing-business-header { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+  .billing-business-header strong, .billing-business-header span { display: block; }
+  .billing-business-header span { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .billing-total { color: var(--bbva-blue); font-size: 18px; white-space: nowrap; }
+  .billing-fields { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+  .billing-fields label { color: var(--muted); display: grid; font-size: 10px; font-weight: 800; gap: 6px; text-transform: uppercase; }
+  .billing-fields input { border: 1px solid var(--border-color); border-radius: 10px; color: var(--bbva-navy); font-weight: 700; min-width: 0; padding: 10px; }
+  .billing-fields input[readonly] { background: #f4f6f8; cursor: not-allowed; }
+  .billing-business-form > .crm-btn { justify-self: end; }
+  .billing-import-panel { align-items: center; background: #fff; border: 1px solid #c9e2ff; border-radius: 14px; display: grid; gap: 12px; grid-template-columns: minmax(280px, 1fr) auto auto auto; margin: 14px 0; padding: 16px; }
+  .billing-import-panel strong { color: var(--bbva-navy); }
+  .billing-import-panel p { color: var(--muted); font-size: 11px; margin: 5px 0 0; }
+  .billing-file-label { background: #f4f7fb; border: 1px dashed #9abce2; border-radius: 10px; color: var(--bbva-blue); cursor: pointer; font-size: 11px; font-weight: 800; padding: 10px 12px; }
+  .billing-file-label input { display: block; font-size: 10px; margin-top: 6px; max-width: 220px; }
+  .billing-template-link { color: var(--bbva-blue); font-size: 11px; font-weight: 800; }
+  #billingImportStatus { grid-column: 1 / -1; }
   .select-estado-sfc, .crm-input { padding: 9px 10px; font-size: 12px; border-radius: 10px; border: 1px solid var(--border-color); font-weight: 700; color: var(--bbva-blue); background: white; }
   .select-estado-sfc { cursor: pointer; }
   .crm-input { width: 140px; text-align: right; }
@@ -199,6 +214,8 @@
   @media (max-width: 1180px) {
     .utility-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .metrics-grid-crm { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .billing-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .billing-import-panel { grid-template-columns: 1fr 1fr; }
   }
 
   @media (max-width: 760px) {
@@ -211,6 +228,8 @@
     .commission-section-header { flex-direction: column; }
     .commission-section-header small { text-align: left; }
     .commission-section-grid { grid-template-columns: 1fr; }
+    .billing-fields, .billing-import-panel { grid-template-columns: 1fr; }
+    .billing-business-header { align-items: flex-start; flex-direction: column; }
 
   .floating-batch-bar-crm { left: 18px; right: 18px; flex-direction: column; gap: 12px; align-items: stretch; }
   }

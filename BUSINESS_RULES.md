@@ -44,12 +44,12 @@
 
 ## BR-05 — Visibilidad Facturación
 
-- **Descripción:** Facturación visualiza contratos con preliquidaciones del periodo actual pendientes de `FACTURADA`, aunque la columna periodo haya quedado como texto `yyyy-MM` o como fecha interpretada por Sheets.
+- **Descripción:** Facturación visualiza negocios con una o varias preliquidaciones del periodo actual pendientes de facturar. La unidad de facturación es el negocio completo, no cada línea de comisión.
 - **Archivo y función:** `JS.html`, `debeMostrarContrato()`, `tienePreliquidacionesPorFacturar()`; `Code.gs`, `buildCrmResponse_()`.
-- **Datos:** Hoja `preliquidaciones` periodo actual, estado `estado_preliquidacion`.
-- **Resultado esperado:** Facturación ve valores a facturar y botón para dejar firme FIDUSAP.
-- **Casos especiales:** Preliquidaciones ya `FACTURADA` no aparecen como pendientes.
-- **Validaciones relacionadas:** `confirmarPreliquidacionFacturada()` valida perfil.
+- **Datos:** Hojas `preliquidaciones` y `facturacion`, periodo operativo actual.
+- **Resultado esperado:** Facturación ve el desglose por tipo y un único formulario consolidado con el total del negocio.
+- **Casos especiales:** Un negocio ya registrado en `facturacion` para el periodo deja de aparecer como pendiente.
+- **Validaciones relacionadas:** `registrarFacturacionNegocio()` valida perfil, periodo y existencia de preliquidaciones.
 - **Riesgo si se modifica:** Alto; puede facturar registros incorrectos.
 
 ## BR-06 — Periodo operativo con corte día 2
@@ -92,25 +92,25 @@
 - **Validaciones relacionadas:** Selección obligatoria de al menos un tipo.
 - **Riesgo si se modifica:** Alto; afecta preliquidación y notificación.
 
-## BR-10 — Facturación deja firme una preliquidación
+## BR-10 — Facturación consolidada por negocio
 
-- **Descripción:** Solo Facturación o Súper Admin puede cambiar preliquidación a `FACTURADA`.
-- **Archivo y función:** `Code.gs`, `confirmarPreliquidacionFacturada()`.
-- **Datos:** ID preliquidación, factura FIDUSAP, usuario activo.
-- **Resultado esperado:** Se actualizan columnas M, N y O de `preliquidaciones`.
-- **Casos especiales:** Si no encuentra ID lanza error.
-- **Validaciones relacionadas:** Perfil Facturación.
+- **Descripción:** Solo Facturación o Súper Admin puede facturar el negocio completo del periodo. Todas sus líneas de preliquidación se consolidan en una única factura.
+- **Archivo y función:** `Code.gs`, `registrarFacturacionNegocio()`, `registrarFacturacionesNegocio_()`; `JS.html`, `registrarFacturaNegocio()`.
+- **Datos:** Radicación, Código FIDUSAP, periodo, fecha de facturación, valor total, factura FIDUSAP y CUFE.
+- **Resultado esperado:** Se agrega una fila en `facturacion` y todas las preliquidaciones del negocio/periodo pasan a `FACTURADA` con la misma factura, CUFE y fecha.
+- **Casos especiales:** El valor informado debe coincidir, redondeado al peso, con la suma de los totales preliquidados.
+- **Validaciones relacionadas:** Perfil Facturación, duplicado por radicación/periodo, coincidencia con `control` y `LockService`.
 - **Riesgo si se modifica:** Alto; afecta cierre contable/facturación.
 
-## BR-11 — Facturación de periodo
+## BR-11 — Importación masiva de facturación
 
-- **Descripción:** Perfil Facturación registra radicaciones como facturadas en hoja `facturacion`.
-- **Archivo y función:** `Code.gs`, `registrarFacturacionPeriodo()`.
-- **Datos:** Lista de radicaciones, periodo operativo, usuario activo.
-- **Resultado esperado:** Se agregan filas con estado `FACTURADO`.
-- **Casos especiales:** No hay deduplicación explícita comprobada en la función.
-- **Validaciones relacionadas:** Perfil Facturación.
-- **Riesgo si se modifica:** Alto; afecta histórico de facturación.
+- **Descripción:** Facturación puede cargar un CSV para registrar varios negocios completos en una operación.
+- **Archivo y función:** `JS.html`, `convertirCsvFacturacion()`, `importarFacturacionCsv()`; `Code.gs`, `importarFacturacionMasiva()`.
+- **Datos:** Columnas `radicacion`, `codigo_fidusap`, `periodo`, `fecha_facturacion`, `valor_facturado`, `factura_fidusap`, `cufe`.
+- **Resultado esperado:** Todas las filas se validan antes de escribir; si alguna falla, el lote no se registra.
+- **Casos especiales:** No admite radicaciones repetidas, periodos diferentes al operativo ni negocios ya facturados.
+- **Validaciones relacionadas:** Mismas validaciones del registro manual consolidado.
+- **Riesgo si se modifica:** Alto; afecta cargas masivas e integridad de datos.
 
 ## BR-12 — Cierre mensual de liquidación variable
 

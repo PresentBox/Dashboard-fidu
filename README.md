@@ -37,8 +37,13 @@ Columnas creadas:
 | C | radicacion |
 | D | usuario |
 | E | estado_facturacion |
+| F | codigo_fidusap |
+| G | fecha_facturacion |
+| H | valor_facturado |
+| I | factura_fidusap |
+| J | cufe |
 
-El periodo operativo se calcula con el reloj actual del script en formato `yyyy-MM`, pero conserva el mes anterior hasta el día 2 calendario a las 11:59 p. m. del mes siguiente. El día 3 inicia el nuevo periodo. Cuando una radicación queda registrada para el periodo operativo, desaparece de la vista de pendientes de Facturación.
+El periodo operativo se calcula con el reloj actual del script en formato `yyyy-MM`, pero conserva el mes anterior hasta el día 2 calendario a las 11:59 p. m. del mes siguiente. El día 3 inicia el nuevo periodo. La factura se registra por negocio completo y consolida todas sus líneas de preliquidación. Factura FIDUSAP, CUFE, fecha y valor son obligatorios; el valor debe coincidir con el total preliquidado. Puede registrarse manualmente o mediante un CSV con los encabezados indicados en la interfaz. Cuando una radicación queda registrada para el periodo operativo, desaparece de la vista de pendientes de Facturación.
 
 ## Mapeo inicial para pre liquidación
 
@@ -174,8 +179,10 @@ Columnas creadas automáticamente en `preliquidaciones`:
 | N | factura_fidusap |
 | O | usuario_factura |
 | P | descripcion_comision |
+| Q | cufe |
+| R | fecha_facturacion |
 
-Cuando existe al menos una preliquidación del periodo para una radicación, esa radicación deja de aparecer en los alertamientos mensuales de pendiente por preliquidar y queda visible como gestionada/preliquidada en la bandeja BTM del periodo. Facturación puede dejarla en firme con el botón `Dejar en firme FIDUSAP`, que cambia el estado a `FACTURADA` y registra la referencia de factura.
+Cuando existe al menos una preliquidación del periodo para una radicación, esa radicación deja de aparecer en los alertamientos mensuales de pendiente por preliquidar y queda visible como gestionada/preliquidada en la bandeja BTM del periodo. Facturación registra una factura consolidada por negocio; al confirmarla, todas las líneas del periodo cambian a `FACTURADA` y comparten factura, CUFE y fecha de facturación.
 
 ### Ajustes de cálculo de preliquidación
 
@@ -187,7 +194,7 @@ En el frontend el usuario puede agregar uno o varios tipos de comisión a un res
 
 El menú lateral mantiene tres acciones principales: Home, Preliquidación y Crear nuevo negocio. La opción de nuevo negocio muestra un formulario en blanco para que un BTM registre una radicación nueva con datos abiertos de control, asignaciones BTM, tipo de comisión sugerido desde `Tabla de comisiones` y descripción de comisiones. Al guardar, el sistema agrega la fila en `control` y la asignación en `CONT/BTM`; en `CONT/BTM` guarda Código Negocio FIDUSAP en columna B y Nombre del Negocio en columna D.
 
-Las métricas de gestión se calculan sobre la vista/filtro actual e incluyen contratos activos, variables, discrepancias, inactivos y en liquidación. En la vista BTM, el indicador de pendientes del periodo actual baja cuando un contrato variable queda preliquidado; en la vista Facturación se mantiene como preliquidaciones pendientes de dejar en firme/facturar. El periodo cambia automáticamente con el reloj del script (`yyyy-MM`) bajo corte día 2: por ejemplo, del 1 al 2 de agosto aún se trabaja julio; el 3 de agosto inicia agosto y se vuelve a evaluar la hoja `preliquidaciones` contra ese nuevo periodo.
+Las métricas de gestión se calculan sobre la vista/filtro actual e incluyen contratos activos, variables, discrepancias, inactivos y en liquidación. En la vista BTM, el indicador de pendientes del periodo actual baja cuando un contrato variable queda preliquidado; en la vista Facturación se mantiene como negocios preliquidados pendientes de registrar su factura consolidada. El periodo cambia automáticamente con el reloj del script (`yyyy-MM`) bajo corte día 2: por ejemplo, del 1 al 2 de agosto aún se trabaja julio; el 3 de agosto inicia agosto y se vuelve a evaluar la hoja `preliquidaciones` contra ese nuevo periodo.
 
 ## Perfil, métricas compactas y feedback visual
 

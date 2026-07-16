@@ -2,9 +2,16 @@
 
 ## Versión actual
 
-- **Versión:** 0.2.10
+- **Versión:** 0.2.11
 - **Fecha:** 2026-07-16
-- **Entrega:** Simplifica tipos de comisión con salario mínimo para calcular solo cantidad de salarios × SMMLV y mostrar el SMMLV bloqueado al BTM.
+- **Entrega:** Facturación consolidada por negocio con factura FIDUSAP, CUFE, fecha, validación de valor e importación CSV.
+
+## 0.2.11
+
+- Cambia la unidad de facturación: se factura el negocio completo del periodo y no cada línea de preliquidación.
+- Exige factura FIDUSAP, CUFE y fecha de facturación; valida el valor contra la suma de todas las preliquidaciones.
+- Agrega importación masiva CSV y descarga de plantilla desde el frontend.
+- Amplía `facturacion` con código FIDUSAP, fecha, valor, factura y CUFE, y protege el registro con `LockService`.
 
 ## 0.2.10
 

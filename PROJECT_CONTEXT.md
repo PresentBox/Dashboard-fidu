@@ -6,7 +6,7 @@
 
 Fidu Gestión CRM es una aplicación web de Google Apps Script para apoyar la gestión de contratos fiduciarios, preliquidaciones, cambios de estado, alertas mensuales y registro de facturación sobre una base operativa en Google Sheets.
 
-El sistema centraliza datos provenientes de varias pestañas del spreadsheet, calcula métricas por perfil, permite a usuarios BTM generar preliquidaciones por tipo de comisión, notifica al perfil Facturación y permite marcar preliquidaciones como facturadas en FIDUSAP.
+El sistema centraliza datos provenientes de varias pestañas del spreadsheet, calcula métricas por perfil, permite a usuarios BTM generar preliquidaciones por tipo de comisión, notifica al perfil Facturación y permite registrar la factura consolidada del negocio con factura FIDUSAP, CUFE, fecha y valor validado.
 
 ## 2. Arquitectura actual
 
@@ -119,7 +119,7 @@ No hay uso de `PropertiesService` en el código actual.
 
 ### LockService / concurrencia
 
-No hay uso de `LockService` en el código actual. Las operaciones de escritura usan `appendRow`, `setValue`, `setValues` y actualizaciones por rango, pero no están protegidas con locks. Esto es deuda técnica para operaciones concurrentes.
+El registro manual y masivo de facturación consolidada usa `LockService.getDocumentLock()` para impedir facturas duplicadas por concurrencia. Otras escrituras históricas continúan sin lock y mantienen esa deuda técnica.
 
 ## 9. Funciones principales del backend
 
@@ -132,9 +132,10 @@ No hay uso de `LockService` en el código actual. Las operaciones de escritura u
 | `guardarAjustesEnLote(paqueteCambios)` | Guarda cambios de estado en `control` y notifica a Facturación. |
 | `registrarPreliquidacionContrato(payload)` | Registra una preliquidación individual y notifica a Facturación. |
 | `registrarPreliquidacionesContrato(paquetes)` | Registra varias preliquidaciones para una radicación y retorna consolidado. |
-| `confirmarPreliquidacionFacturada(preliquidacionId, facturaFidusap)` | Facturación marca una preliquidación como `FACTURADA`. |
+| `registrarFacturacionNegocio(payload)` | Registra factura, CUFE, fecha y valor consolidado de un negocio. |
+| `importarFacturacionMasiva(registros)` | Valida y registra un lote CSV de facturas consolidadas. |
 | `registrarCierreLiquidacionMensual(radicaciones)` | Cierra liquidación mensual de contratos variables. |
-| `registrarFacturacionPeriodo(radicaciones)` | Registra negocios facturados para periodo operativo. |
+| `registrarFacturacionPeriodo(radicaciones)` | Endpoint legado bloqueado; orienta al flujo consolidado. |
 | `enviarAlertasLiquidacionBTM()` | Envía alertas programadas de liquidación. |
 | `crearTriggerAlertasLiquidacion()` | Crea trigger diario de alertas. |
 | `simularAlertasLiquidacionBTM(fechaISO)` | Simula alertas sin enviar correos. |
@@ -146,8 +147,8 @@ Desde `JS.html` se llaman:
 
 - `obtenerEcosistemaLiquidaciones()`.
 - `registrarPreliquidacionesContrato(payloads)`.
-- `confirmarPreliquidacionFacturada(preliquidacionId, factura)`.
-- `registrarFacturacionPeriodo(radicaciones)`.
+- `registrarFacturacionNegocio(payload)`.
+- `importarFacturacionMasiva(registros)`.
 - `guardarAjustesEnLote(loteCambiosPendientes)`.
 - `registrarCierreLiquidacionMensual([radicacion])`.
 - `ejecutarAccionServidor(radicacion, 'LIQUIDAR', monto, 'BTM')`.
@@ -174,10 +175,10 @@ No renombrar estas funciones sin actualizar `JS.html`.
 
 ### Facturación
 
-- Facturación ve preliquidaciones del periodo actual pendientes de `FACTURADA`.
-- Ve subtotal, IVA y valor a facturar.
-- Usa `Dejar en firme FIDUSAP` para guardar referencia.
-- Backend actualiza estado, factura y usuario facturador.
+- Facturación ve negocios con preliquidaciones del periodo actual pendientes.
+- Ve cada tipo de comisión y el total consolidado del negocio.
+- Registra factura FIDUSAP, CUFE y fecha manualmente, o importa un CSV con esos datos, periodo y valor.
+- Backend valida que el valor coincida con el total preliquidado, escribe una fila en `facturacion` y marca todas las líneas del negocio como `FACTURADA`.
 
 ### Nuevo negocio
 
@@ -254,7 +255,7 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Lecturas principales: `getDataRange().getValues()` o rangos completos según columnas requeridas.
 - Escrituras nuevas: `appendRow()` para facturación, liquidaciones, preliquidaciones y nuevo negocio.
 - Actualizaciones puntuales: `setValue()` para estados y confirmación de factura.
-- No hay control transaccional ni locks.
+- La facturación consolidada usa lock documental y escrituras agrupadas; los demás flujos aún no tienen control transaccional completo.
 
 ## 16. Dependencias entre funciones
 
@@ -282,8 +283,8 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Vista BTM y vista Facturación.
 - Preliquidación por uno o varios tipos de comisión.
 - Registro de preliquidaciones.
-- Confirmación de facturación FIDUSAP.
-- Registro de facturación de periodo.
+- Facturación consolidada por negocio con factura FIDUSAP, CUFE, fecha y valor validado.
+- Importación masiva de facturación mediante CSV.
 - Cierre mensual de liquidación.
 - Alertas mensuales con simuladores y wrappers de prueba.
 - Nuevo negocio con tipo de comisión sugerido.
@@ -299,7 +300,7 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 
 ## 20. Errores conocidos y riesgos pendientes
 
-- Sin `LockService`: riesgo de carreras si dos usuarios escriben al mismo tiempo.
+- `LockService` cubre la facturación consolidada; otros flujos de escritura aún tienen riesgo de carreras.
 - Sin `CacheService`: lecturas completas pueden ser costosas con hojas grandes.
 - Sin `PropertiesService`: configuración sensible a cambios directos en código.
 - Dependencia de nombres exactos de hojas.
@@ -352,3 +353,5 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Desde la versión 0.2.8, los correos operativos reutilizan el look and feel HTML de las alertas diarias previas al vencimiento.
 - Desde la versión 0.2.9, la normalización porcentual divide todo valor no cero entre 100 para representar porcentajes decimales escritos por el usuario.
 - Desde la versión 0.2.10, los tipos con `cantidad` en modo salarios calculan exclusivamente cantidad × SMMLV y muestran el SMMLV como campo bloqueado visible.
+
+- Desde la versión 0.2.11, Facturación registra el negocio completo del periodo, exige factura FIDUSAP, CUFE y fecha, valida el valor consolidado y permite importación CSV protegida con lock.

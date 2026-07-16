@@ -2,7 +2,6 @@
   var cacheDatos = null;
   var usuarioAuditadoEmail = null;
   var loteCambiosPendientes = {};
-  var facturacionSeleccionada = {};
   var lotePreliquidacionesPendientes = [];
   var datosListosParaIngreso = false;
 
@@ -53,7 +52,9 @@
     var selectorPerfil = document.getElementById('cmbPerfilVista');
     var botonAuditar = document.getElementById('btnAuditarUsuario');
     var botonGuardar = document.getElementById('btnGuardarLote');
-    var botonRegistrarFacturacion = document.getElementById('btnRegistrarFacturacion');
+    var botonImportarFacturacion = document.getElementById('btnImportarFacturacion');
+    var archivoFacturacion = document.getElementById('billingCsvFile');
+    var plantillaFacturacion = document.getElementById('billingCsvTemplate');
     var botonEntrar = document.getElementById('btnEntrarApp');
     var profileToggle = document.getElementById('profileToggle');
     var newBusinessNav = document.getElementById('btnNewBusinessNav');
@@ -64,7 +65,9 @@
     if (selectorPerfil) selectorPerfil.onchange = cambiarPerfilDeVista;
     if (botonAuditar) botonAuditar.onclick = auditarUsuarioFiltro;
     if (botonGuardar) botonGuardar.onclick = guardarLoteCompletoCRM;
-    if (botonRegistrarFacturacion) botonRegistrarFacturacion.onclick = registrarPeriodoFacturado;
+    if (botonImportarFacturacion) botonImportarFacturacion.onclick = importarFacturacionCsv;
+    if (archivoFacturacion) archivoFacturacion.onchange = prepararImportacionFacturacion;
+    if (plantillaFacturacion) plantillaFacturacion.onclick = descargarPlantillaFacturacion;
     if (botonEntrar) botonEntrar.onclick = entrarAplicacion;
     if (profileToggle) profileToggle.onclick = alternarResumenPerfil;
     if (newBusinessNav) newBusinessNav.onclick = mostrarNuevoNegocio;
@@ -285,6 +288,8 @@
 
     contenedor.innerHTML = '';
     document.getElementById('loader').style.display = 'none';
+    var panelImportacion = document.getElementById('billingImportPanel');
+    if (panelImportacion) panelImportacion.classList.toggle('hidden', !estaEnVistaFacturacion());
 
     lista.forEach(function(item) {
       if (!debeMostrarContrato(item, vista, filterComision, filterEstado, busquedaContrato)) return;
@@ -516,9 +521,6 @@
       row.innerHTML = '<strong></strong><span></span>';
       row.querySelector('strong').textContent = pre.tipoComision + ' · ' + (pre.estado || 'PRELIQUIDADA');
       row.querySelector('span').textContent = 'Subtotal: ' + formatoMoneda(pre.subtotal) + ' · IVA: ' + formatoMoneda(pre.iva) + ' · Valor a facturar: ' + formatoMoneda(pre.total) + (pre.facturaFidusap ? ' · Factura: ' + pre.facturaFidusap : '');
-      if (estaEnVistaFacturacion() && pre.estado !== 'FACTURADA') {
-        row.appendChild(crearBotonConfirmarFactura(pre.id));
-      }
       resumen.appendChild(row);
     });
     return resumen;
@@ -711,23 +713,23 @@
   }
 
   function crearSelectorFacturacion(item) {
-    var wrapper = document.createElement('label');
-    wrapper.className = 'billing-check-row';
-
-    var checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = Boolean(facturacionSeleccionada[item.radicacion]);
-    checkbox.onchange = function() {
-      if (checkbox.checked) {
-        facturacionSeleccionada[item.radicacion] = true;
-      } else {
-        delete facturacionSeleccionada[item.radicacion];
-      }
-      actualizarBarraFacturacionUI();
+    var wrapper = document.createElement('div');
+    wrapper.className = 'billing-business-form';
+    var total = (item.preliquidacionesPeriodoActual || []).reduce(function(sum, pre) { return sum + (Number(pre.total) || 0); }, 0);
+    wrapper.innerHTML = '<div class="billing-business-header"><div><strong>Facturación consolidada del negocio</strong><span>Incluye todos los tipos de comisión preliquidados del periodo.</span></div><strong class="billing-total"></strong></div>' +
+      '<div class="billing-fields">' +
+      '<label><span>Factura FIDUSAP</span><input data-billing="factura" type="text" autocomplete="off" required></label>' +
+      '<label><span>CUFE</span><input data-billing="cufe" type="text" autocomplete="off" required></label>' +
+      '<label><span>Fecha de facturación</span><input data-billing="fecha" type="date" required></label>' +
+      '<label><span>Periodo</span><input data-billing="periodo" type="text" readonly></label>' +
+      '<label><span>Valor facturado</span><input data-billing="valor" type="text" readonly></label>' +
+      '</div><button class="crm-btn crm-btn-primary" type="button"><i class="fa-solid fa-file-invoice"></i> Registrar factura del negocio</button>';
+    wrapper.querySelector('.billing-total').textContent = formatoMoneda(total);
+    wrapper.querySelector('[data-billing="periodo"]').value = cacheDatos.periodoActual || '';
+    wrapper.querySelector('[data-billing="valor"]').value = formatoMoneda(total);
+    wrapper.querySelector('button').onclick = function() {
+      registrarFacturaNegocio(item, wrapper, total);
     };
-
-    wrapper.appendChild(checkbox);
-    wrapper.appendChild(document.createTextNode(' Marcar este negocio como facturado para el periodo ' + (cacheDatos.periodoActual || 'actual')));
     return wrapper;
   }
 
@@ -967,20 +969,35 @@
       .registrarPreliquidacionesContrato(payloads);
   }
 
-  function crearBotonConfirmarFactura(preliquidacionId) {
-    var boton = document.createElement('button');
-    boton.className = 'crm-btn close-liquidation-btn';
-    boton.type = 'button';
-    boton.textContent = 'Dejar en firme FIDUSAP';
-    boton.onclick = function() {
-      var factura = prompt('Número o referencia de factura FIDUSAP:');
-      if (factura === null) return;
-      google.script.run
-        .withSuccessHandler(function(respuesta) { alert(respuesta); cargarEcosistemaCRM(); })
-        .withFailureHandler(function(err) { alert('Error al confirmar factura: ' + err.message); })
-        .confirmarPreliquidacionFacturada(preliquidacionId, factura);
+  function registrarFacturaNegocio(item, wrapper, total) {
+    var payload = {
+      radicacion: item.radicacion,
+      codigoFidusap: item.codigoFidusap === 'Sin código FIDUSAP' ? '' : item.codigoFidusap,
+      periodo: cacheDatos.periodoActual,
+      fechaFacturacion: wrapper.querySelector('[data-billing="fecha"]').value,
+      valorFacturado: total,
+      facturaFidusap: wrapper.querySelector('[data-billing="factura"]').value.trim(),
+      cufe: wrapper.querySelector('[data-billing="cufe"]').value.trim()
     };
-    return boton;
+    if (!payload.facturaFidusap || !payload.cufe || !payload.fechaFacturacion) {
+      alert('Completa factura FIDUSAP, CUFE y fecha de facturación.');
+      return;
+    }
+    var boton = wrapper.querySelector('button');
+    boton.disabled = true;
+    mostrarProceso('Registrando la factura consolidada del negocio...');
+    google.script.run
+      .withSuccessHandler(function(respuesta) {
+        ocultarProceso();
+        alert(respuesta.mensaje || 'Factura registrada.');
+        cargarEcosistemaCRM();
+      })
+      .withFailureHandler(function(err) {
+        ocultarProceso();
+        boton.disabled = false;
+        alert('Error al registrar factura: ' + err.message);
+      })
+      .registrarFacturacionNegocio(payload);
   }
 
   function registrarCambioEnLote(radicacion, elementoSelect, estadoOriginalHoja) {
@@ -1008,28 +1025,106 @@
     contador.setAttribute('aria-label', longitudLote + ' cambios pendientes');
   }
 
-  function actualizarBarraFacturacionUI() {
-    var cantidad = Object.keys(facturacionSeleccionada).length;
-    setText('txtFacturacionCount', cantidad);
-    document.getElementById('facturacionActionBar').classList.toggle('hidden', cantidad === 0);
+  var filasImportacionFacturacion = [];
+
+  function prepararImportacionFacturacion(event) {
+    var archivo = event.target.files && event.target.files[0];
+    filasImportacionFacturacion = [];
+    var boton = document.getElementById('btnImportarFacturacion');
+    var estado = document.getElementById('billingImportStatus');
+    boton.disabled = true;
+    estado.textContent = '';
+    if (!archivo) return;
+    var lector = new FileReader();
+    lector.onload = function(e) {
+      try {
+        filasImportacionFacturacion = convertirCsvFacturacion(e.target.result);
+        boton.disabled = filasImportacionFacturacion.length === 0;
+        estado.textContent = filasImportacionFacturacion.length + ' registro(s) listos para validación en servidor.';
+      } catch (error) {
+        estado.textContent = 'Error: ' + error.message;
+      }
+    };
+    lector.readAsText(archivo, 'UTF-8');
   }
 
-  function registrarPeriodoFacturado() {
-    var radicaciones = Object.keys(facturacionSeleccionada);
-    if (radicaciones.length === 0) {
-      alert('Selecciona al menos un negocio.');
-      return;
-    }
+  function convertirCsvFacturacion(texto) {
+    var lineas = (texto || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter(function(linea) { return linea.trim() !== ''; });
+    if (lineas.length < 2) throw new Error('El archivo debe incluir encabezados y al menos una fila.');
+    var delimitador = lineas[0].split(';').length >= lineas[0].split(',').length ? ';' : ',';
+    var filas = lineas.map(function(linea) { return separarFilaCsv(linea, delimitador); });
+    var encabezados = filas.shift().map(normalizarEncabezadoFacturacion);
+    var requeridos = ['radicacion', 'codigo_fidusap', 'periodo', 'fecha_facturacion', 'valor_facturado', 'factura_fidusap', 'cufe'];
+    requeridos.forEach(function(campo) {
+      if (encabezados.indexOf(campo) === -1) throw new Error('Falta la columna obligatoria "' + campo + '".');
+    });
+    return filas.map(function(fila) {
+      var registro = {};
+      encabezados.forEach(function(campo, index) { registro[campo] = (fila[index] || '').trim(); });
+      return {
+        radicacion: registro.radicacion,
+        codigoFidusap: registro.codigo_fidusap,
+        periodo: registro.periodo,
+        fechaFacturacion: registro.fecha_facturacion,
+        valorFacturado: registro.valor_facturado,
+        facturaFidusap: registro.factura_fidusap,
+        cufe: registro.cufe
+      };
+    });
+  }
 
+  function separarFilaCsv(linea, delimitador) {
+    var resultado = [];
+    var actual = '';
+    var entreComillas = false;
+    for (var i = 0; i < linea.length; i++) {
+      var caracter = linea.charAt(i);
+      if (caracter === '"' && entreComillas && linea.charAt(i + 1) === '"') { actual += '"'; i++; continue; }
+      if (caracter === '"') { entreComillas = !entreComillas; continue; }
+      if (caracter === delimitador && !entreComillas) { resultado.push(actual); actual = ''; continue; }
+      actual += caracter;
+    }
+    if (entreComillas) throw new Error('Hay una fila con comillas sin cerrar.');
+    resultado.push(actual);
+    return resultado;
+  }
+
+  function normalizarEncabezadoFacturacion(valor) {
+    return normalizarTextoPlano_(valor).trim().replace(/\s+/g, '_');
+  }
+
+  function importarFacturacionCsv() {
+    if (!filasImportacionFacturacion.length) return;
+    var boton = document.getElementById('btnImportarFacturacion');
+    boton.disabled = true;
+    mostrarProceso('Validando e importando facturación consolidada...');
     google.script.run
       .withSuccessHandler(function(respuesta) {
-        alert(respuesta);
-        facturacionSeleccionada = {};
-        actualizarBarraFacturacionUI();
+        ocultarProceso();
+        alert(respuesta.mensaje || 'Importación completada.');
+        filasImportacionFacturacion = [];
+        document.getElementById('billingCsvFile').value = '';
+        document.getElementById('billingImportStatus').textContent = '';
         cargarEcosistemaCRM();
       })
-      .withFailureHandler(function(err) { alert('Error al registrar facturación: ' + err.message); })
-      .registrarFacturacionPeriodo(radicaciones);
+      .withFailureHandler(function(err) {
+        ocultarProceso();
+        boton.disabled = false;
+        document.getElementById('billingImportStatus').textContent = 'Error: ' + err.message;
+      })
+      .importarFacturacionMasiva(filasImportacionFacturacion);
+  }
+
+  function descargarPlantillaFacturacion(event) {
+    event.preventDefault();
+    var periodo = cacheDatos && cacheDatos.periodoActual ? cacheDatos.periodoActual : 'AAAA-MM';
+    var contenido = 'radicacion;codigo_fidusap;periodo;fecha_facturacion;valor_facturado;factura_fidusap;cufe\n' +
+      'RADICACION;CODIGO;' + periodo + ';AAAA-MM-DD;0;FACTURA;CUFE';
+    var enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(new Blob([contenido], { type: 'text/csv;charset=utf-8;' }));
+    enlace.download = 'plantilla_facturacion_fidu.csv';
+    enlace.click();
+    URL.revokeObjectURL(enlace.href);
   }
 
   function guardarLoteCompletoCRM() {

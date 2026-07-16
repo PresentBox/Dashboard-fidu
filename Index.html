@@ -122,6 +122,22 @@
               <i class="fa-solid fa-circle-notch fa-spin"></i> Conciliando bases de datos en tiempo récord...
             </div>
 
+            <div id="billingImportPanel" class="billing-import-panel hidden">
+              <div>
+                <strong><i class="fa-solid fa-file-csv"></i> Importación masiva de facturación</strong>
+                <p>CSV con columnas: radicacion, codigo_fidusap, periodo, fecha_facturacion, valor_facturado, factura_fidusap y cufe.</p>
+              </div>
+              <label class="billing-file-label">
+                <span>Seleccionar archivo CSV</span>
+                <input id="billingCsvFile" type="file" accept=".csv,text/csv">
+              </label>
+              <button id="btnImportarFacturacion" class="crm-btn crm-btn-primary" type="button" disabled>
+                <i class="fa-solid fa-upload"></i> Validar e importar
+              </button>
+              <a id="billingCsvTemplate" class="billing-template-link" href="#">Descargar plantilla CSV</a>
+              <div id="billingImportStatus" class="preliq-help" aria-live="polite"></div>
+            </div>
+
             <div id="workspaceExpedientes" class="contracts-grid"></div>
           </section>
 
@@ -166,16 +182,6 @@
 
       <div id="processOverlay" class="process-overlay hidden">
         <div class="process-card"><i class="fa-solid fa-circle-notch fa-spin"></i><span id="processText">Procesando...</span></div>
-      </div>
-
-      <div id="facturacionActionBar" class="floating-batch-bar-crm hidden">
-        <div class="batch-summary">
-          <div class="batch-counter-badge-crm" id="txtFacturacionCount">0</div>
-          <div>Negocios seleccionados para marcar como facturados en el periodo actual</div>
-        </div>
-        <button id="btnRegistrarFacturacion" class="crm-btn save-batch-btn">
-          <i class="fa-solid fa-file-circle-check"></i> Registrar periodo facturado
-        </button>
       </div>
 
       <div id="floatingSaveBar" class="floating-batch-bar-crm hidden">
