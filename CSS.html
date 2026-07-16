@@ -96,7 +96,10 @@
   .utility-card p { margin: 0; color: var(--bbva-navy); line-height: 1.5; }
 
   .profile-selector-box { display: flex; gap: 10px; align-items: center; }
-  .profile-selector-box select { padding: 11px 15px; font-size: 12px; font-weight: 700; border-radius: 12px; border: 1px solid transparent; color: var(--bbva-blue); cursor: pointer; background: #fff; box-shadow: var(--shadow-soft); }
+  .profile-selector-box select, .profile-selector-box input { padding: 11px 15px; font-size: 12px; font-weight: 700; border-radius: 12px; border: 1px solid transparent; color: var(--bbva-blue); background: #fff; box-shadow: var(--shadow-soft); }
+  .profile-selector-box select { cursor: pointer; }
+  .profile-selector-box input { min-width: 230px; color: var(--bbva-navy); }
+  .profile-selector-box input::placeholder { color: var(--muted); }
 
   .metrics-grid-crm { display: grid; grid-template-columns: repeat(8, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
   .metric-card-crm { background: var(--card); border-radius: 14px; padding: 12px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow-soft); min-height: 78px; }
@@ -147,6 +150,7 @@
   .preliq-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .preliq-field { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
   .preliq-field input { padding: 9px 10px; border: 1px solid var(--border-color); border-radius: 10px; color: var(--bbva-navy); font-weight: 700; }
+  .preliq-field-readonly input { background: #eef6ff; color: var(--bbva-blue); cursor: not-allowed; }
   .preliq-total-preview { color: var(--bbva-navy); font-weight: 900; background: #eef6ff; border-radius: 12px; padding: 12px 14px; }
   .preliq-help { color: var(--muted); font-size: 12px; line-height: 1.45; }
   .preliq-pending-list { display: grid; gap: 8px; }
@@ -157,8 +161,23 @@
   .badge { padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; text-transform: uppercase; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
   .badge-ok { background: #e6f4ea; color: var(--success); }
   .badge-alert { background: #fce8e6; color: var(--danger); }
-  .billing-check-row { background: #eef6ff; border: 1px solid #c9e2ff; border-radius: 12px; color: var(--bbva-navy); cursor: pointer; font-size: 12px; font-weight: 700; padding: 12px 14px; }
-  .billing-check-row input { margin-right: 8px; }
+  .billing-business-form { background: #eef6ff; border: 1px solid #c9e2ff; border-radius: 14px; color: var(--bbva-navy); display: grid; gap: 14px; padding: 16px; }
+  .billing-business-header { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+  .billing-business-header strong, .billing-business-header span { display: block; }
+  .billing-business-header span { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .billing-total { color: var(--bbva-blue); font-size: 18px; white-space: nowrap; }
+  .billing-fields { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+  .billing-fields label { color: var(--muted); display: grid; font-size: 10px; font-weight: 800; gap: 6px; text-transform: uppercase; }
+  .billing-fields input { border: 1px solid var(--border-color); border-radius: 10px; color: var(--bbva-navy); font-weight: 700; min-width: 0; padding: 10px; }
+  .billing-fields input[readonly] { background: #f4f6f8; cursor: not-allowed; }
+  .billing-business-form > .crm-btn { justify-self: end; }
+  .billing-import-panel { align-items: center; background: #fff; border: 1px solid #c9e2ff; border-radius: 14px; display: grid; gap: 12px; grid-template-columns: minmax(280px, 1fr) auto auto auto; margin: 14px 0; padding: 16px; }
+  .billing-import-panel strong { color: var(--bbva-navy); }
+  .billing-import-panel p { color: var(--muted); font-size: 11px; margin: 5px 0 0; }
+  .billing-file-label { background: #f4f7fb; border: 1px dashed #9abce2; border-radius: 10px; color: var(--bbva-blue); cursor: pointer; font-size: 11px; font-weight: 800; padding: 10px 12px; }
+  .billing-file-label input { display: block; font-size: 10px; margin-top: 6px; max-width: 220px; }
+  .billing-template-link { color: var(--bbva-blue); font-size: 11px; font-weight: 800; }
+  #billingImportStatus { grid-column: 1 / -1; }
   .select-estado-sfc, .crm-input { padding: 9px 10px; font-size: 12px; border-radius: 10px; border: 1px solid var(--border-color); font-weight: 700; color: var(--bbva-blue); background: white; }
   .select-estado-sfc { cursor: pointer; }
   .crm-input { width: 140px; text-align: right; }
@@ -171,7 +190,12 @@
   .new-business-form { background: #fff; border-radius: 18px; box-shadow: var(--shadow-soft); padding: 22px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
   .new-business-form label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
   .new-business-form input, .new-business-form select, .new-business-form textarea { border: 1px solid var(--border-color); border-radius: 12px; color: var(--bbva-navy); font-weight: 700; padding: 11px 12px; font-family: inherit; resize: vertical; }
-  .new-business-form label:nth-child(7) { grid-column: span 3; }
+  .new-business-commission-section { grid-column: 1 / -1; border: 1px solid var(--border-color); border-radius: 16px; padding: 16px; background: #f8fbff; display: grid; gap: 14px; }
+  .commission-section-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .commission-section-header span { color: var(--bbva-navy); font-size: 14px; font-weight: 900; text-transform: uppercase; }
+  .commission-section-header small { color: var(--muted); font-size: 12px; font-weight: 700; line-height: 1.45; text-align: right; text-transform: none; max-width: 560px; }
+  .commission-section-grid { display: grid; grid-template-columns: minmax(260px, 0.85fr) minmax(320px, 1.15fr); gap: 14px; align-items: stretch; }
+  .commission-section-grid textarea { min-height: 132px; }
   .new-business-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
 
 
@@ -190,6 +214,8 @@
   @media (max-width: 1180px) {
     .utility-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .metrics-grid-crm { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .billing-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .billing-import-panel { grid-template-columns: 1fr 1fr; }
   }
 
   @media (max-width: 760px) {
@@ -198,8 +224,40 @@
     .app-shell { height: auto; padding: 22px 18px 110px; }
     .profile-hero, .audit-card, .crm-card-row, .section-heading { flex-direction: column; align-items: stretch; }
     .utility-grid, .operation-data-grid, .preliquidation-columns, .preliq-fields, .new-business-form { grid-template-columns: 1fr; }
-    .new-business-form label:nth-child(7), .new-business-actions { grid-column: auto; }
+    .new-business-commission-section, .new-business-actions { grid-column: auto; }
+    .commission-section-header { flex-direction: column; }
+    .commission-section-header small { text-align: left; }
+    .commission-section-grid { grid-template-columns: 1fr; }
+    .billing-fields, .billing-import-panel { grid-template-columns: 1fr; }
+    .billing-business-header { align-items: flex-start; flex-direction: column; }
 
   .floating-batch-bar-crm { left: 18px; right: 18px; flex-direction: column; gap: 12px; align-items: stretch; }
   }
+
+  .new-business-commission-preview {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 12px;
+  }
+
+  .new-business-preview-card {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+  }
+
+
+  .app-version-badge {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    margin-left: 8px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #eef4ff;
+    color: var(--bbva-blue);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
 </style>

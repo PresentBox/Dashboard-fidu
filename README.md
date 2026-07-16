@@ -21,7 +21,7 @@ Crea una hoja llamada `usuarios` para perfiles adicionales que deben ver todos l
 Notas:
 
 - El perfil `Facturación` puede escribirse con o sin tilde; el sistema lo normaliza.
-- El perfil `Súper Admin` también puede administrarse en esta hoja; el código conserva una lista bootstrap mínima en `Code.gs` solo como respaldo de emergencia si la hoja aún no existe o queda mal configurada.
+- El perfil `Súper Admin` se administra desde esta hoja; el código no conserva correos bootstrap de Súper Admin.
 - Usa `NO`, `INACTIVO` o `FALSE` en la columna C para desactivar un usuario.
 
 ## Hoja `facturacion`
@@ -37,8 +37,13 @@ Columnas creadas:
 | C | radicacion |
 | D | usuario |
 | E | estado_facturacion |
+| F | codigo_fidusap |
+| G | fecha_facturacion |
+| H | valor_facturado |
+| I | factura_fidusap |
+| J | cufe |
 
-El periodo operativo se calcula con el reloj actual del script en formato `yyyy-MM`, pero conserva el mes anterior hasta el día 2 calendario a las 11:59 p. m. del mes siguiente. El día 3 inicia el nuevo periodo. Cuando una radicación queda registrada para el periodo operativo, desaparece de la vista de pendientes de Facturación.
+El periodo operativo se calcula con el reloj actual del script en formato `yyyy-MM`, pero conserva el mes anterior hasta el día 2 calendario a las 11:59 p. m. del mes siguiente. El día 3 inicia el nuevo periodo. La factura se registra por negocio completo y consolida todas sus líneas de preliquidación. Factura FIDUSAP, CUFE, fecha y valor son obligatorios; el valor debe coincidir con el total preliquidado. Puede registrarse manualmente o mediante un CSV con los encabezados indicados en la interfaz. Cuando una radicación queda registrada para el periodo operativo, desaparece de la vista de pendientes de Facturación. Para evitar falsos positivos de datos históricos, una fila solo se reconoce como facturada cuando tiene estado `FACTURADO`, fecha de facturación, valor mayor que cero, factura FIDUSAP y CUFE.
 
 ## Mapeo inicial para pre liquidación
 
@@ -174,20 +179,22 @@ Columnas creadas automáticamente en `preliquidaciones`:
 | N | factura_fidusap |
 | O | usuario_factura |
 | P | descripcion_comision |
+| Q | cufe |
+| R | fecha_facturacion |
 
-Cuando existe al menos una preliquidación del periodo para una radicación, esa radicación deja de aparecer en los alertamientos mensuales de pendiente por preliquidar y se oculta de la bandeja operativa BTM del periodo. Facturación puede dejarla en firme con el botón `Dejar en firme FIDUSAP`, que cambia el estado a `FACTURADA` y registra la referencia de factura.
+Cuando existe al menos una preliquidación del periodo para una radicación, esa radicación deja de aparecer en los alertamientos mensuales de pendiente por preliquidar y queda visible como gestionada/preliquidada en la bandeja BTM del periodo. Facturación registra una factura consolidada por negocio; al confirmarla, todas las líneas del periodo cambian a `FACTURADA` y comparten factura, CUFE y fecha de facturación.
 
 ### Ajustes de cálculo de preliquidación
 
-Los campos porcentuales de la `Tabla de comisiones` se muestran al usuario como porcentaje entero cuando la hoja los almacena como decimal. Por ejemplo, un `3%` almacenado como `0,03` se presenta como `3` y se calcula como `3%`; si el usuario ingresa `1`, el cálculo interpreta `1%` (`0,01`) y no `100%`. Para cantidades de salarios mínimos, valores como `0,65` se conservan como `0,65` y se multiplican directamente por el SMMLV configurado.
+Los campos porcentuales de la `Tabla de comisiones` se interpretan como porcentaje escrito por el usuario y se dividen entre 100: `1` se calcula como 1% (`0,01`), `3` como 3% (`0,03`), `0,3` como 0,3% (`0,003`) y `0,05` como 0,05% (`0,0005`). Para cantidades de salarios mínimos, valores como `0,65` se conservan como `0,65`, se multiplican directamente por el SMMLV configurado y el formulario muestra el SMMLV como campo bloqueado para validación del BTM.
 
 En el frontend el usuario puede agregar uno o varios tipos de comisión a un resumen temporal y luego guardar/cerrar la preliquidación. El sistema registra cada tipo como una línea independiente y devuelve el total consolidado del periodo seleccionado. La vista de Facturación muestra las preliquidaciones pendientes con subtotal, IVA y valor a facturar para dejarlas en firme en FIDUSAP.
 
 ## Creación de nuevo negocio
 
-El menú lateral mantiene tres acciones principales: Home, Preliquidación y Crear nuevo negocio. La opción de nuevo negocio muestra un formulario en blanco para que un BTM registre una radicación nueva con datos abiertos de control, asignaciones BTM, tipo de comisión sugerido desde `Tabla de comisiones` y descripción de comisiones. Al guardar, el sistema agrega la fila en `control` y la asignación en `CONT/BTM`.
+El menú lateral mantiene tres acciones principales: Home, Preliquidación y Crear nuevo negocio. La opción de nuevo negocio muestra un formulario en blanco para que un BTM registre una radicación nueva con datos abiertos de control, asignaciones BTM, tipo de comisión sugerido desde `Tabla de comisiones` y descripción de comisiones. Al guardar, el sistema agrega la fila en `control` y la asignación en `CONT/BTM`; en `CONT/BTM` guarda Código Negocio FIDUSAP en columna B y Nombre del Negocio en columna D.
 
-Las métricas de gestión se calculan sobre la vista/filtro actual e incluyen contratos activos, variables, discrepancias, inactivos y en liquidación. En la vista BTM, el indicador de pendientes del periodo actual baja cuando un contrato variable queda preliquidado; en la vista Facturación se mantiene como preliquidaciones pendientes de dejar en firme/facturar. El periodo cambia automáticamente con el reloj del script (`yyyy-MM`) bajo corte día 2: por ejemplo, del 1 al 2 de agosto aún se trabaja julio; el 3 de agosto inicia agosto y se vuelve a evaluar la hoja `preliquidaciones` contra ese nuevo periodo.
+Las métricas de gestión se calculan sobre la vista/filtro actual e incluyen contratos activos, variables, discrepancias, inactivos y en liquidación. En la vista BTM, el indicador de pendientes del periodo actual baja cuando un contrato variable queda preliquidado; en la vista Facturación se mantiene como negocios preliquidados pendientes de registrar su factura consolidada. El periodo cambia automáticamente con el reloj del script (`yyyy-MM`) bajo corte día 2: por ejemplo, del 1 al 2 de agosto aún se trabaja julio; el 3 de agosto inicia agosto y se vuelve a evaluar la hoja `preliquidaciones` contra ese nuevo periodo.
 
 ## Perfil, métricas compactas y feedback visual
 

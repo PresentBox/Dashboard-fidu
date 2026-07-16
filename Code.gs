@@ -3,6 +3,7 @@
 // ============================================================================
 const CONFIG = {
   APP_TITLE: 'Fidu Gestión - CRM Lotes',
+  APP_VERSION: '0.2.12',
   SHEETS: {
     CONTROL: 'control',
     BTM: 'CONT/BTM',
@@ -13,12 +14,6 @@ const CONFIG = {
     TABLA_COMISIONES: 'Tabla de comisiones',
     PRELIQUIDACIONES: 'preliquidaciones'
   },
-  // Fallback de emergencia para no perder acceso si la hoja `usuarios` aún no existe.
-  BOOTSTRAP_SUPER_ADMINS: [
-    'davidorlando.diaz@bbva.com',
-    'edith.herrera@bbva.com',
-    'sebastian.cuervo.rojas@bbva.com'
-  ],
   CONTROL_COLS: {
     RADICACION: 0,
     CODIGO_FIDUSAP: 1,
@@ -31,7 +26,9 @@ const CONFIG = {
   },
   BTM_COLS: {
     RADICACION: 0,
-    NOMBRE: 1,
+    CODIGO_FIDUSAP: 1,
+    NOMBRE_LEGACY: 1,
+    NOMBRE: 3,
     PROFESIONAL_CONTABLE: 6,
     GERENTE: 22,
     PROFESIONAL_BTM: 23
@@ -46,7 +43,7 @@ const CONFIG = {
   PERIOD_CUTOFF_DAY: 2,
   DASHBOARD_URL: 'https://script.google.com/a/macros/bbva.com/s/AKfycbyFsbZtNVXLaKN6Rba2uTPj9k4-1iBiqzlkleUwLQs1ytgS2nETaz_teUz9yQllh6Ey_A/exec',
   // Cambia este correo para ejecutar pruebas desde el menú de Apps Script sin editar parámetros de funciones.
-  TEST_EMAIL: 'davidorlando.diaz@bbva.com'
+  TEST_EMAIL: 'pruebas@bbva.com'
 };
 
 const ROLES = {
@@ -140,23 +137,27 @@ function registrarNuevoNegocio(payload) {
   controlRow[CONFIG.CONTROL_COLS.FECHA_VIGENCIA] = parseOptionalDate_(payload.fechaVigencia);
   controlRow[CONFIG.CONTROL_COLS.NOMBRE_NEGOCIO] = nombre;
   controlRow[CONFIG.CONTROL_COLS.ESTADO] = toCleanString_(payload.estado) || 'Activo';
-  var tipoComisionSugerida = toCleanString_(payload.tipoComisionSugerida);
+  var tiposComisionSugeridos = normalizeCommissionTypesPayload_(payload.tipoComisionSugerida || payload.tiposComisionSugerida);
   var descripcionComisiones = toCleanString_(payload.descripcionComisiones);
-  controlRow[CONFIG.CONTROL_COLS.COMISION] = tipoComisionSugerida
-    ? ('Tipo de comisión sugerido: ' + tipoComisionSugerida + (descripcionComisiones ? '. ' + descripcionComisiones : ''))
+  controlRow[CONFIG.CONTROL_COLS.COMISION] = tiposComisionSugeridos.length
+    ? ('Tipos de comisión sugeridos: ' + tiposComisionSugeridos.join(', ') + (descripcionComisiones ? '. ' + descripcionComisiones : ''))
     : descripcionComisiones;
-  controlRow[CONFIG.CONTROL_COLS.TIPO] = toCleanString_(payload.tipoGeneral) || 'No Definido';
+  controlRow[CONFIG.CONTROL_COLS.TIPO] = normalizeGeneralType_(payload.tipoGeneral);
   sheets.control.appendRow(controlRow);
 
   var btmRow = new Array(24).fill('');
   btmRow[CONFIG.BTM_COLS.RADICACION] = radicacion;
+  btmRow[CONFIG.BTM_COLS.CODIGO_FIDUSAP] = toCleanString_(payload.codigoFidusap);
   btmRow[CONFIG.BTM_COLS.NOMBRE] = nombre;
   btmRow[CONFIG.BTM_COLS.PROFESIONAL_CONTABLE] = normalizeEmail_(payload.profesionalContable);
   btmRow[CONFIG.BTM_COLS.GERENTE] = normalizeEmail_(payload.gerenteBtm) || email;
   btmRow[CONFIG.BTM_COLS.PROFESIONAL_BTM] = normalizeEmail_(payload.profesionalBtm) || email;
   sheets.btm.appendRow(btmRow);
 
-  return '✅ Negocio ' + radicacion + ' creado para preliquidación.';
+  notifyAssignedBtmNewBusiness_(btmRow[CONFIG.BTM_COLS.GERENTE], btmRow[CONFIG.BTM_COLS.PROFESIONAL_BTM], email, radicacion, nombre, tiposComisionSugeridos);
+  var resumenPreliquidacionInicial = registrarPreliquidacionesInicialesNuevoNegocio_(book, email, radicacion, nombre, controlRow, payload.preliquidacionesIniciales);
+
+  return '✅ Negocio ' + radicacion + ' creado y notificado al BTM asignado.' + (resumenPreliquidacionInicial.cantidad ? ' Se guardaron ' + resumenPreliquidacionInicial.cantidad + ' preliquidación(es) inicial(es) por $' + resumenPreliquidacionInicial.total.toLocaleString('es-CO') + '.' : ' No se guardaron preliquidaciones iniciales.');
 }
 
 /**
@@ -164,6 +165,199 @@ function registrarNuevoNegocio(payload) {
  * @param {Object} paqueteCambios Objeto { radicacion: nuevoEstado }.
  * @return {string}
  */
+
+
+function registrarPreliquidacionesInicialesNuevoNegocio_(book, usuario, radicacion, nombreNegocio, controlRow, paquetes) {
+  var resumen = { cantidad: 0, total: 0 };
+  if (!Array.isArray(paquetes) || paquetes.length === 0) return resumen;
+
+  var tipos = getCommissionTypes_(book);
+  var sheet = getOrCreatePreliquidationSheet_(book);
+  var period = getCurrentBillingPeriod_();
+  var now = new Date();
+  var rows = [];
+  var notificaciones = [];
+
+  paquetes.forEach(function(paquete) {
+    var tipo = findCommissionType_(tipos, paquete.tipoComision);
+    if (!tipo) throw new Error('Selecciona un tipo de comisión válido para la preliquidación inicial: ' + toCleanString_(paquete.tipoComision));
+    var valores = paquete.valores || {};
+    var calculo = calcularPreliquidacion_(tipo, valores);
+    if (!calculo.total || calculo.total <= 0) return;
+    var id = Utilities.getUuid();
+    rows.push([
+      now,
+      period,
+      id,
+      radicacion,
+      toCleanString_(controlRow[CONFIG.CONTROL_COLS.CODIGO_FIDUSAP]) || '',
+      nombreNegocio,
+      tipo.tipo,
+      JSON.stringify(valores),
+      calculo.subtotal,
+      calculo.ivaValor,
+      calculo.total,
+      usuario,
+      'PRELIQUIDADA',
+      '',
+      '',
+      toCleanString_(controlRow[CONFIG.CONTROL_COLS.COMISION]) || ''
+    ]);
+    resumen.cantidad++;
+    resumen.total += calculo.total;
+    notificaciones.push({ tipo: tipo.tipo, calculo: calculo });
+  });
+
+  if (rows.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    notificaciones.forEach(function(item) {
+      notifyBillingPreliquidation_(book, usuario, nombreNegocio, radicacion, item.tipo, item.calculo);
+    });
+  }
+
+  return resumen;
+}
+
+function normalizeGeneralType_(value) {
+  var normalized = normalizaTexto_(value);
+  if (normalized === 'fija' || normalized === 'fijo') return 'Fija';
+  if (normalized === 'variable') return 'Variable';
+  throw new Error('Tipo general inválido. Selecciona Fija o Variable.');
+}
+
+function normalizeCommissionTypesPayload_(value) {
+  if (Array.isArray(value)) {
+    return value.map(toCleanString_).filter(function(item, index, array) {
+      return item && array.indexOf(item) === index;
+    });
+  }
+  var clean = toCleanString_(value);
+  if (!clean) return [];
+  return clean.split(',').map(toCleanString_).filter(function(item, index, array) {
+    return item && array.indexOf(item) === index;
+  });
+}
+
+function buildAssignmentCatalogs_(asignaciones) {
+  var catalogs = { gerentesBtm: [], profesionalesBtm: [], profesionalesContables: [] };
+  Object.keys(asignaciones || {}).forEach(function(key) {
+    addUniqueEmail_(catalogs.gerentesBtm, asignaciones[key].gerente);
+    addUniqueEmail_(catalogs.profesionalesBtm, asignaciones[key].profesionalBtm);
+    addUniqueEmail_(catalogs.profesionalesContables, asignaciones[key].profesionalContable);
+  });
+  catalogs.gerentesBtm.sort();
+  catalogs.profesionalesBtm.sort();
+  catalogs.profesionalesContables.sort();
+  return catalogs;
+}
+
+function addUniqueEmail_(list, value) {
+  var email = normalizeEmail_(value);
+  if (email && list.indexOf(email) === -1) list.push(email);
+}
+
+function buildStandardAlertShellHtml_(title, subtitle, contentHtml) {
+  return '<div style="background:#f3f4f6;padding:28px;font-family:Segoe UI,Arial,sans-serif;color:#020b5f;">' +
+    '<div style="max-width:760px;margin:0 auto;background:#ffffff;border-radius:22px;overflow:hidden;box-shadow:0 18px 45px rgba(4,17,90,0.08);">' +
+      '<div style="background:#001391;color:#fff;padding:28px 32px;">' +
+        '<div style="font-size:36px;font-weight:900;margin-bottom:12px;">BBVA</div>' +
+        '<h1 style="margin:0;font-size:24px;line-height:1.25;">' + escapeHtml_(title) + '</h1>' +
+        '<p style="margin:10px 0 0;color:#d8ecff;">' + escapeHtml_(subtitle || 'CRM Fiduciaria BBVA · Sistema de alertas') + '</p>' +
+      '</div>' +
+      '<div style="padding:28px 32px;">' + contentHtml + '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function buildDashboardButtonHtml_(label) {
+  return '<div style="margin-top:26px;"><a href="' + CONFIG.DASHBOARD_URL + '" style="display:inline-block;background:#001391;color:#ffffff;text-decoration:none;border-radius:12px;padding:14px 22px;font-weight:800;">' + escapeHtml_(label || 'Ingresar al Dashboard') + '</a></div>';
+}
+
+function buildInfoBoxHtml_(text) {
+  return '<div style="background:#d8ecff;border-radius:16px;padding:16px 18px;margin:18px 0 22px;color:#020b5f;">' + text + '</div>';
+}
+
+function buildSimpleRowsTableHtml_(headers, rows) {
+  var headerHtml = headers.map(function(header) {
+    return '<th style="padding:12px;color:#5d668a;font-size:12px;text-transform:uppercase;text-align:left;">' + escapeHtml_(header) + '</th>';
+  }).join('');
+  var rowHtml = rows.map(function(row) {
+    return '<tr>' + row.map(function(cell, index) {
+      var color = index === 0 ? '#001391' : '#020b5f';
+      var weight = index === 0 ? 'font-weight:700;' : '';
+      return '<td style="padding:12px;border-bottom:1px solid #edf0f4;color:' + color + ';' + weight + '">' + escapeHtml_(cell) + '</td>';
+    }).join('') + '</tr>';
+  }).join('');
+  return '<table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #edf0f4;border-radius:14px;overflow:hidden;">' +
+    '<thead><tr style="background:#f7f8fa;">' + headerHtml + '</tr></thead><tbody>' + rowHtml + '</tbody></table>';
+}
+
+function buildAssignedBtmNewBusinessHtml_(creador, radicacion, nombre, tipos) {
+  var rows = [
+    ['Radicación', radicacion],
+    ['Nombre del negocio', nombre],
+    ['Tipos de comisión sugeridos', tipos],
+    ['Creado por', creador]
+  ];
+  return buildStandardAlertShellHtml_(
+    'Nuevo negocio asignado en Fidu Gestión',
+    'CRM Fiduciaria BBVA · Asignación BTM',
+    '<p style="font-size:17px;line-height:1.55;margin:0 0 18px;font-weight:800;">Hola,</p>' +
+    '<p style="font-size:16px;line-height:1.55;margin:0 0 14px;">Se creó un nuevo negocio en Fidu Gestión y quedaste asignado como BTM responsable.</p>' +
+    buildInfoBoxHtml_('<strong>Acción sugerida:</strong> Revisa el negocio, acepta la gestión operativa y genera la preliquidación inicial cuando corresponda.') +
+    buildSimpleRowsTableHtml_(['Dato', 'Detalle'], rows) +
+    buildDashboardButtonHtml_('Revisar negocio') +
+    '<p style="font-size:14px;line-height:1.55;margin:22px 0 0;color:#5d668a;">Gracias por tu gestión.</p>'
+  );
+}
+
+function buildBillingPreliquidationHtml_(usuario, nombreNegocio, radicacion, tipoComision, calculo) {
+  var rows = [
+    ['Radicación', radicacion],
+    ['Negocio', nombreNegocio],
+    ['Tipo de comisión', tipoComision],
+    ['Subtotal', '$' + calculo.subtotal.toLocaleString('es-CO')],
+    ['IVA', '$' + calculo.ivaValor.toLocaleString('es-CO')],
+    ['Total', '$' + calculo.total.toLocaleString('es-CO')]
+  ];
+  return buildStandardAlertShellHtml_(
+    'Preliquidación generada para facturación',
+    'CRM Fiduciaria BBVA · Preliquidación',
+    '<p style="font-size:17px;line-height:1.55;margin:0 0 18px;font-weight:800;">Hola equipo de Facturación,</p>' +
+    '<p style="font-size:16px;line-height:1.55;margin:0 0 14px;">El usuario BTM <strong>' + escapeHtml_(usuario) + '</strong> generó una preliquidación que requiere gestión de facturación.</p>' +
+    buildInfoBoxHtml_('<strong>Acción requerida:</strong> Ingresa al Dashboard para revisar y dejar en firme la factura FIDUSAP.') +
+    buildSimpleRowsTableHtml_(['Dato', 'Detalle'], rows) +
+    buildDashboardButtonHtml_('Gestionar facturación') +
+    '<p style="font-size:14px;line-height:1.55;margin:22px 0 0;color:#5d668a;">Gracias por tu gestión.</p>'
+  );
+}
+
+function notifyAssignedBtmNewBusiness_(gerente, profesionalBtm, creador, radicacion, nombre, tiposComision) {
+  var destinatarios = [];
+  addUniqueEmail_(destinatarios, gerente);
+  addUniqueEmail_(destinatarios, profesionalBtm);
+  if (!destinatarios.length) return 0;
+  var asunto = 'Nuevo negocio asignado en Fidu Gestión - ' + radicacion;
+  var tipos = tiposComision && tiposComision.length ? tiposComision.join(', ') : 'Sin tipo sugerido';
+  var cuerpo = 'Hola,\n\n' +
+    'Se creó un nuevo negocio en Fidu Gestión y quedaste asignado como BTM responsable.\n\n' +
+    'Radicación: ' + radicacion + '\n' +
+    'Nombre del negocio: ' + nombre + '\n' +
+    'Tipos de comisión sugeridos: ' + tipos + '\n' +
+    'Creado por: ' + creador + '\n\n' +
+    'Ingresa al Dashboard para revisar, aceptar la gestión operativa y generar la preliquidación inicial cuando corresponda: ' + CONFIG.DASHBOARD_URL;
+  var html = buildAssignedBtmNewBusinessHtml_(creador, radicacion, nombre, tipos);
+  destinatarios.forEach(function(email) {
+    MailApp.sendEmail({
+      to: email,
+      subject: asunto,
+      body: cuerpo,
+      htmlBody: html
+    });
+  });
+  return destinatarios.length;
+}
+
 function guardarAjustesEnLote(paqueteCambios) {
   var cambiosNormalizados = normalizeChangePackage_(paqueteCambios);
   var radicaciones = Object.keys(cambiosNormalizados);
@@ -192,6 +386,50 @@ function guardarAjustesEnLote(paqueteCambios) {
   return '💾 ¡Éxito! Se actualizaron ' + rowsActualizadas + ' estados en control. Se enviaron ' + conteoCorreosSent + ' correos consolidados al equipo de Facturación.';
 }
 
+
+/**
+ * Permite al BTM actualmente asignado reasignar temporalmente el gerente/profesional BTM.
+ * @param {Object} payload Datos de reasignación.
+ * @return {string}
+ */
+function reasignarBtmNegocio(payload) {
+  payload = payload || {};
+  var radicacion = toCleanString_(payload.radicacion);
+  var nuevoGerente = normalizeEmail_(payload.gerenteBtm);
+  var nuevoProfesional = normalizeEmail_(payload.profesionalBtm);
+  if (!radicacion) throw new Error('Radicación inválida para reasignar BTM.');
+  if (!nuevoGerente && !nuevoProfesional) throw new Error('Selecciona al menos un Gerente BTM o Profesional BTM para reasignar.');
+
+  var book = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = getRequiredSheets_(book);
+  var email = getCurrentUserEmail_();
+  var datosBTM = sheets.btm.getDataRange().getValues();
+  var key = normalizeKey_(radicacion);
+  var targetRow = -1;
+  var asignacionActual = null;
+
+  for (var row = 1; row < datosBTM.length; row++) {
+    if (normalizeKey_(datosBTM[row][CONFIG.BTM_COLS.RADICACION]) === key) {
+      targetRow = row + 1;
+      asignacionActual = {
+        gerente: normalizeEmail_(datosBTM[row][CONFIG.BTM_COLS.GERENTE]),
+        profesionalBtm: normalizeEmail_(datosBTM[row][CONFIG.BTM_COLS.PROFESIONAL_BTM])
+      };
+      break;
+    }
+  }
+
+  if (targetRow === -1) throw new Error('No se encontró la radicación ' + radicacion + ' en CONT/BTM.');
+  if (email !== asignacionActual.gerente && email !== asignacionActual.profesionalBtm) {
+    throw new Error('Solo el BTM actualmente asignado al negocio puede reasignarlo temporalmente.');
+  }
+
+  if (nuevoGerente) sheets.btm.getRange(targetRow, CONFIG.BTM_COLS.GERENTE + 1).setValue(nuevoGerente);
+  if (nuevoProfesional) sheets.btm.getRange(targetRow, CONFIG.BTM_COLS.PROFESIONAL_BTM + 1).setValue(nuevoProfesional);
+
+  return '✅ Reasignación BTM guardada para la radicación ' + radicacion + '.';
+}
+
 /**
  * Registra una liquidación variable. Punto preparado para conectar con una hoja/auditoría.
  * @param {string} radicacion
@@ -215,7 +453,7 @@ function getCurrentUserEmail_() {
 
 function isSuperAdmin_(email, perfilesAdicionales) {
   var perfiles = perfilesAdicionales || [];
-  return perfiles.indexOf(ROLES.SUPER_ADMIN) !== -1 || CONFIG.BOOTSTRAP_SUPER_ADMINS.indexOf(email) !== -1;
+  return perfiles.indexOf(ROLES.SUPER_ADMIN) !== -1;
 }
 
 function getRequiredSheets_(book) {
@@ -241,7 +479,8 @@ function buildEmptyResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfile
     listaContratos: [],
     tiposComision: [],
     metricas: { totalActivos: 0, totalVariables: 0, discrepancias: 0, pendientesFacturacionPeriodo: 0, totalInactivos: 0, totalEnLiquidacion: 0, totalFijos: 0, totalContratosComision: 0 },
-    periodoActual: getCurrentBillingPeriod_()
+    periodoActual: getCurrentBillingPeriod_(),
+    version: CONFIG.APP_VERSION
   };
 }
 
@@ -266,7 +505,7 @@ function buildBtmAssignmentsMap_(datosBTM) {
     if (!radicacion || isHeaderLike_(radicacion)) continue;
 
     mapaAsignacionesBTM[radicacion] = {
-      nombreBTM: toCleanString_(datosBTM[row][CONFIG.BTM_COLS.NOMBRE]) || 'Sin Nombre Especificado',
+      nombreBTM: toCleanString_(datosBTM[row][CONFIG.BTM_COLS.NOMBRE]) || toCleanString_(datosBTM[row][CONFIG.BTM_COLS.NOMBRE_LEGACY]) || 'Sin Nombre Especificado',
       profesionalContable: normalizeEmail_(datosBTM[row][CONFIG.BTM_COLS.PROFESIONAL_CONTABLE]),
       gerente: normalizeEmail_(datosBTM[row][CONFIG.BTM_COLS.GERENTE]),
       profesionalBtm: normalizeEmail_(datosBTM[row][CONFIG.BTM_COLS.PROFESIONAL_BTM])
@@ -296,6 +535,9 @@ function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesA
     var estadoRealSFC = mapaEstadosSFC[radicacionKey] || 'No Encontrado';
     var estadoValidacion = getValidationStatus_(estadoControl, estadoRealSFC, metricas);
     var esquema = interpretarTextoComision(datosControl[row][CONFIG.CONTROL_COLS.COMISION]);
+    var tipoGeneralNormalizado = normalizaTexto_(datosControl[row][CONFIG.CONTROL_COLS.TIPO]);
+    if (tipoGeneralNormalizado === 'variable') esquema = 'Variable';
+    if (tipoGeneralNormalizado === 'fija' || tipoGeneralNormalizado === 'fijo') esquema = 'Fija';
 
     var estaActivo = estadoControl.toLowerCase() === 'activo';
     var facturadoPeriodoActual = Boolean(facturadosPeriodoActual[radicacionKey]);
@@ -335,6 +577,7 @@ function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesA
         validacionSFC: estadoValidacion,
         estadoActual: estadoControl,
         facturadoPeriodoActual: facturadoPeriodoActual,
+        facturacionPeriodoActual: facturadosPeriodoActual[radicacionKey] || null,
         liquidacionCerradaPeriodoActual: liquidacionCerradaPeriodoActual,
         preliquidadoPeriodoActual: preliquidadoPeriodoActual,
         preliquidacionesPeriodoActual: preliquidacionesContrato,
@@ -357,8 +600,10 @@ function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesA
     rolesDisponibles: buildRolesList_(esSuperAdmin, perfilesAdicionales, Array.from(rolesDetectados)),
     listaContratos: contratosProcesados,
     tiposComision: tiposComision || [],
+    catalogosAsignacion: buildAssignmentCatalogs_(mapaAsignacionesBTM),
     metricas: metricas,
-    periodoActual: getCurrentBillingPeriod_()
+    periodoActual: getCurrentBillingPeriod_(),
+    version: CONFIG.APP_VERSION
   };
 }
 
@@ -455,8 +700,15 @@ function sendGroupedNotifications_(ejecutor, gruposPorContador) {
     if (contadorDestino.indexOf('@') === -1 || contadorDestino === CONFIG.SIN_ASIGNAR_EMAIL) return;
 
     var asunto = '⚠️ Resumen de Cambios Operativos Lote BTM - Solicitud de Facturación';
-    var cuerpo = buildNotificationBody_(ejecutor, gruposPorContador[contadorDestino]);
-    MailApp.sendEmail(contadorDestino, asunto, cuerpo);
+    var items = gruposPorContador[contadorDestino];
+    var cuerpo = buildNotificationBody_(ejecutor, items);
+    var html = buildNotificationHtml_(ejecutor, items);
+    MailApp.sendEmail({
+      to: contadorDestino,
+      subject: asunto,
+      body: cuerpo,
+      htmlBody: html
+    });
     conteoCorreosSent++;
   });
 
@@ -538,6 +790,21 @@ function getCurrentBillingPeriod_() {
   return Utilities.formatDate(periodDate, timeZone, CONFIG.CURRENT_PERIOD_FORMAT);
 }
 
+function normalizePeriodValue_(value) {
+  if (!value) return '';
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), CONFIG.CURRENT_PERIOD_FORMAT);
+  }
+  var text = toCleanString_(value).replace(/^'/, '');
+  var dateMatch = text.match(/^(\d{4})[-\/](\d{1,2})(?:[-\/]\d{1,2})?$/);
+  if (dateMatch) return dateMatch[1] + '-' + ('0' + dateMatch[2]).slice(-2);
+  var parsed = new Date(text);
+  if (!isNaN(parsed.getTime()) && /\d{4}/.test(text)) {
+    return Utilities.formatDate(parsed, Session.getScriptTimeZone(), CONFIG.CURRENT_PERIOD_FORMAT);
+  }
+  return text;
+}
+
 function buildCurrentPeriodBillingMap_(book) {
   var sheet = book.getSheetByName(CONFIG.SHEETS.FACTURACION);
   var map = {};
@@ -546,11 +813,32 @@ function buildCurrentPeriodBillingMap_(book) {
   var currentPeriod = getCurrentBillingPeriod_();
   var values = sheet.getDataRange().getValues();
   for (var row = 1; row < values.length; row++) {
-    var period = toCleanString_(values[row][1]);
+    var period = normalizePeriodValue_(values[row][1]);
     var radicacion = normalizeKey_(values[row][2]);
-    if (period === currentPeriod && radicacion) map[radicacion] = true;
+    if (period === currentPeriod && radicacion && isCompleteBillingRecord_(values[row])) {
+      map[radicacion] = {
+        fechaRegistro: formatSheetDate_(values[row][0]),
+        periodo: period,
+        radicacion: toCleanString_(values[row][2]),
+        usuario: toCleanString_(values[row][3]),
+        estado: toCleanString_(values[row][4]) || 'FACTURADO',
+        codigoFidusap: toCleanString_(values[row][5]),
+        fechaFacturacion: formatSheetDate_(values[row][6]),
+        valorFacturado: Number(values[row][7]) || 0,
+        facturaFidusap: toCleanString_(values[row][8]),
+        cufe: toCleanString_(values[row][9])
+      };
+    }
   }
   return map;
+}
+
+function isCompleteBillingRecord_(row) {
+  return normalizaTexto_(row[4]) === 'facturado' &&
+    Boolean(toCleanString_(row[6])) &&
+    parseNumber_(row[7]) > 0 &&
+    Boolean(toCleanString_(row[8])) &&
+    Boolean(toCleanString_(row[9]));
 }
 
 
@@ -562,7 +850,7 @@ function buildCurrentPeriodLiquidationMap_(book) {
   var currentPeriod = getCurrentBillingPeriod_();
   var values = sheet.getDataRange().getValues();
   for (var row = 1; row < values.length; row++) {
-    var period = toCleanString_(values[row][1]);
+    var period = normalizePeriodValue_(values[row][1]);
     var radicacion = normalizeKey_(values[row][2]);
     if (period === currentPeriod && radicacion) map[radicacion] = true;
   }
@@ -596,6 +884,9 @@ function registrarPreliquidacionContrato(payload) {
   var controlPorRadicacion = buildControlRowsMap_(datosControl);
   var row = controlPorRadicacion[key];
   if (!row) throw new Error('No se encontró la radicación ' + radicacion + ' en control.');
+
+  var estadoNegocio = normalizaEstadoNegocio_(row[CONFIG.CONTROL_COLS.ESTADO]);
+  if (estadoNegocio !== 'activo') throw new Error('El negocio está ' + toCleanString_(row[CONFIG.CONTROL_COLS.ESTADO]) + ' y no permite preliquidar.');
 
   var asignacion = asignaciones[key] || buildEmptyAssignment_();
   var puedePreliquidar = esAdmin || email === asignacion.gerente || email === asignacion.profesionalBtm;
@@ -669,29 +960,144 @@ function registrarPreliquidacionesContrato(paquetes) {
 }
 
 /**
- * Facturación deja en firme una preliquidación cuando registra la factura en FIDUSAP.
- * @param {string} preliquidacionId
- * @param {string} facturaFidusap
- * @return {string}
+ * Compatibilidad con clientes antiguos. La facturación ya no se confirma por línea.
  */
-function confirmarPreliquidacionFacturada(preliquidacionId, facturaFidusap) {
-  var book = SpreadsheetApp.getActiveSpreadsheet();
-  var email = getCurrentUserEmail_();
-  var perfiles = getAdditionalProfiles_(book, email);
-  if (!isSuperAdmin_(email, perfiles) && perfiles.indexOf(ROLES.FACTURACION) === -1) {
-    throw new Error('Solo Facturación puede dejar en firme la preliquidación facturada.');
+function confirmarPreliquidacionFacturada() {
+  throw new Error('La facturación ahora se registra por negocio completo. Actualiza la aplicación y usa Registrar factura del negocio.');
+}
+
+/**
+ * Registra una factura consolidada para todas las preliquidaciones del negocio en el periodo actual.
+ * @param {Object} payload Datos de factura del negocio.
+ * @return {Object}
+ */
+function registrarFacturacionNegocio(payload) {
+  return registrarFacturacionesNegocio_([payload], false);
+}
+
+/**
+ * Importa facturas consolidadas previamente leídas desde un CSV en el frontend.
+ * @param {Object[]} registros Filas normalizadas del archivo.
+ * @return {Object}
+ */
+function importarFacturacionMasiva(registros) {
+  return registrarFacturacionesNegocio_(registros, true);
+}
+
+function registrarFacturacionesNegocio_(registros, esImportacion) {
+  if (!Array.isArray(registros) || registros.length === 0) {
+    throw new Error('No hay registros de facturación para procesar.');
   }
-  var sheet = getOrCreatePreliquidationSheet_(book);
-  var data = sheet.getDataRange().getValues();
-  for (var row = 1; row < data.length; row++) {
-    if (toCleanString_(data[row][2]) === toCleanString_(preliquidacionId)) {
-      sheet.getRange(row + 1, 13).setValue('FACTURADA');
-      sheet.getRange(row + 1, 14).setValue(toCleanString_(facturaFidusap) || 'FIDUSAP registrado');
-      sheet.getRange(row + 1, 15).setValue(email);
-      return '✅ Preliquidación marcada como facturada en FIDUSAP.';
+
+  var lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    var book = SpreadsheetApp.getActiveSpreadsheet();
+    var email = getCurrentUserEmail_();
+    var perfiles = getAdditionalProfiles_(book, email);
+    if (!isSuperAdmin_(email, perfiles) && perfiles.indexOf(ROLES.FACTURACION) === -1) {
+      throw new Error('Solo el perfil Facturación puede registrar facturas.');
     }
+
+    var sheets = getRequiredSheets_(book);
+    var controlRows = buildControlRowsMap_(sheets.control.getDataRange().getValues());
+    var preSheet = getOrCreatePreliquidationSheet_(book);
+    ensurePreliquidationBillingColumns_(preSheet);
+    var preValues = preSheet.getRange(1, 1, preSheet.getLastRow(), 18).getValues();
+    var billingSheet = getOrCreateBillingSheet_(book);
+    var facturadosPeriodo = buildCurrentPeriodBillingMap_(book);
+    var periodoActual = getCurrentBillingPeriod_();
+    var now = new Date();
+    var billingRows = [];
+    var keysProcesadas = {};
+
+    registros.forEach(function(raw, index) {
+      var payload = raw || {};
+      var radicacion = toCleanString_(payload.radicacion);
+      var key = normalizeKey_(radicacion);
+      var prefijo = esImportacion ? 'Fila ' + (index + 2) + ': ' : '';
+      if (!key) throw new Error(prefijo + 'la radicación es obligatoria.');
+      if (keysProcesadas[key]) throw new Error(prefijo + 'la radicación ' + radicacion + ' está repetida en el archivo.');
+      if (facturadosPeriodo[key]) throw new Error(prefijo + 'la radicación ' + radicacion + ' ya está facturada en ' + periodoActual + '.');
+
+      var controlRow = controlRows[key];
+      if (!controlRow) throw new Error(prefijo + 'la radicación ' + radicacion + ' no existe en control.');
+      var codigoControl = toCleanString_(controlRow[CONFIG.CONTROL_COLS.CODIGO_FIDUSAP]);
+      var codigoArchivo = toCleanString_(payload.codigoFidusap);
+      if (codigoArchivo && normalizeKey_(codigoArchivo) !== normalizeKey_(codigoControl)) {
+        throw new Error(prefijo + 'el Código FIDUSAP no coincide con control para la radicación ' + radicacion + '.');
+      }
+
+      var periodo = normalizePeriodValue_(payload.periodo || periodoActual);
+      if (periodo !== periodoActual) {
+        throw new Error(prefijo + 'el periodo debe ser ' + periodoActual + '.');
+      }
+      var factura = toCleanString_(payload.facturaFidusap);
+      var cufe = toCleanString_(payload.cufe);
+      if (!factura) throw new Error(prefijo + 'el número de factura FIDUSAP es obligatorio.');
+      if (!cufe) throw new Error(prefijo + 'el CUFE es obligatorio.');
+      var fechaFacturacion = parseRequiredBillingDate_(payload.fechaFacturacion, prefijo);
+
+      var indicesPreliquidacion = [];
+      var totalPreliquidado = 0;
+      for (var row = 1; row < preValues.length; row++) {
+        if (normalizePeriodValue_(preValues[row][1]) !== periodo || normalizeKey_(preValues[row][3]) !== key) continue;
+        indicesPreliquidacion.push(row);
+        totalPreliquidado += Number(preValues[row][10]) || 0;
+      }
+      if (indicesPreliquidacion.length === 0) {
+        throw new Error(prefijo + 'no existen preliquidaciones del periodo para la radicación ' + radicacion + '.');
+      }
+
+      var valorInformado = parseNumber_(payload.valorFacturado);
+      if (valorInformado <= 0) throw new Error(prefijo + 'el valor facturado debe ser mayor que cero.');
+      if (Math.round(valorInformado) !== Math.round(totalPreliquidado)) {
+        throw new Error(prefijo + 'el valor facturado (' + valorInformado + ') no coincide con el total preliquidado (' + totalPreliquidado + ').');
+      }
+
+      indicesPreliquidacion.forEach(function(preRow) {
+        preValues[preRow][12] = 'FACTURADA';
+        preValues[preRow][13] = factura;
+        preValues[preRow][14] = email;
+        preValues[preRow][16] = cufe;
+        preValues[preRow][17] = fechaFacturacion;
+      });
+      billingRows.push([now, periodo, radicacion, email, 'FACTURADO', codigoControl, fechaFacturacion, Math.round(totalPreliquidado), factura, cufe]);
+      keysProcesadas[key] = true;
+    });
+
+    var primeraFilaFacturacion = billingSheet.getLastRow() + 1;
+    billingSheet.getRange(primeraFilaFacturacion, 1, billingRows.length, 10).setValues(billingRows);
+    try {
+      if (preValues.length > 1) {
+        preSheet.getRange(2, 1, preValues.length - 1, 18).setValues(preValues.slice(1));
+      }
+    } catch (writeError) {
+      billingSheet.deleteRows(primeraFilaFacturacion, billingRows.length);
+      throw writeError;
+    }
+    SpreadsheetApp.flush();
+
+    return {
+      cantidad: billingRows.length,
+      periodo: periodoActual,
+      mensaje: '✅ Se registraron ' + billingRows.length + ' negocio(s) facturado(s) para el periodo ' + periodoActual + '.'
+    };
+  } finally {
+    lock.releaseLock();
   }
-  throw new Error('No se encontró la preliquidación indicada.');
+}
+
+function parseRequiredBillingDate_(value, prefijo) {
+  var text = toCleanString_(value);
+  if (!text) throw new Error((prefijo || '') + 'la fecha de facturación es obligatoria.');
+  var match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) throw new Error((prefijo || '') + 'la fecha de facturación debe usar formato AAAA-MM-DD.');
+  var date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (date.getFullYear() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1 || date.getDate() !== Number(match[3])) {
+    throw new Error((prefijo || '') + 'la fecha de facturación no es válida.');
+  }
+  return date;
 }
 
 function registrarCierreLiquidacionMensual(radicaciones) {
@@ -722,6 +1128,9 @@ function registrarCierreLiquidacionMensual(radicaciones) {
     if (!row) throw new Error('No se encontró la radicación ' + clean + ' en control.');
 
     var esquema = interpretarTextoComision(row[CONFIG.CONTROL_COLS.COMISION]);
+    var tipoGeneralNormalizado = normalizaTexto_(row[CONFIG.CONTROL_COLS.TIPO]);
+    if (tipoGeneralNormalizado === 'variable') esquema = 'Variable';
+    if (tipoGeneralNormalizado === 'fija' || tipoGeneralNormalizado === 'fijo') esquema = 'Fija';
     if (esquema !== 'Variable') throw new Error('La radicación ' + clean + ' no es de esquema variable.');
 
     var asignacion = asignaciones[key] || buildEmptyAssignment_();
@@ -752,13 +1161,19 @@ function getOrCreatePreliquidationSheet_(book) {
   var sheet = book.getSheetByName(CONFIG.SHEETS.PRELIQUIDACIONES);
   if (!sheet) {
     sheet = book.insertSheet(CONFIG.SHEETS.PRELIQUIDACIONES);
-    sheet.getRange(1, 1, 1, 16).setValues([[
+    sheet.getRange(1, 1, 1, 18).setValues([[
       'fecha_registro', 'periodo', 'id', 'radicacion', 'codigo_fidusap', 'nombre_negocio',
       'tipo_comision', 'valores_json', 'subtotal', 'iva', 'total', 'usuario_preliquida',
-      'estado_preliquidacion', 'factura_fidusap', 'usuario_factura', 'descripcion_comision'
+      'estado_preliquidacion', 'factura_fidusap', 'usuario_factura', 'descripcion_comision',
+      'cufe', 'fecha_facturacion'
     ]]);
   }
   return sheet;
+}
+
+function ensurePreliquidationBillingColumns_(sheet) {
+  if (sheet.getMaxColumns() < 18) sheet.insertColumnsAfter(sheet.getMaxColumns(), 18 - sheet.getMaxColumns());
+  sheet.getRange(1, 17, 1, 2).setValues([['cufe', 'fecha_facturacion']]);
 }
 
 function buildCurrentPeriodPreliquidationMap_(book) {
@@ -768,13 +1183,13 @@ function buildCurrentPeriodPreliquidationMap_(book) {
   var period = getCurrentBillingPeriod_();
   var values = sheet.getDataRange().getValues();
   for (var row = 1; row < values.length; row++) {
-    if (toCleanString_(values[row][1]) !== period) continue;
+    if (normalizePeriodValue_(values[row][1]) !== period) continue;
     var key = normalizeKey_(values[row][3]);
     if (!key) continue;
     if (!map[key]) map[key] = [];
     map[key].push({
       fecha: formatSheetDate_(values[row][0]),
-      periodo: toCleanString_(values[row][1]),
+      periodo: normalizePeriodValue_(values[row][1]),
       id: toCleanString_(values[row][2]),
       radicacion: toCleanString_(values[row][3]),
       tipoComision: toCleanString_(values[row][6]),
@@ -783,7 +1198,9 @@ function buildCurrentPeriodPreliquidationMap_(book) {
       total: Number(values[row][10]) || 0,
       usuario: toCleanString_(values[row][11]),
       estado: toCleanString_(values[row][12]) || 'PRELIQUIDADA',
-      facturaFidusap: toCleanString_(values[row][13])
+      facturaFidusap: toCleanString_(values[row][13]),
+      cufe: toCleanString_(values[row][16]),
+      fechaFacturacion: formatSheetDate_(values[row][17])
     });
   }
   return map;
@@ -801,7 +1218,7 @@ function buildLatestPreliquidationMap_(book) {
     var record = {
       fecha: formatSheetDate_(values[row][0]),
       fechaSerial: values[row][0] instanceof Date ? values[row][0].getTime() : row,
-      periodo: toCleanString_(values[row][1]),
+      periodo: normalizePeriodValue_(values[row][1]),
       id: toCleanString_(values[row][2]),
       radicacion: toCleanString_(values[row][3]),
       tipoComision: toCleanString_(values[row][6]),
@@ -865,7 +1282,7 @@ function buildCommissionField_(label, key, tipo, descripcion, value, display, ba
     enabled: !isDisabledCommissionCell_(background),
     ejemplo: toCleanString_(display),
     valor: rawValue,
-    valorEntrada: mode === 'porcentaje' && rawValue > 0 && rawValue <= 1 ? rawValue * 100 : rawValue,
+    valorEntrada: rawValue,
     modo: mode
   };
 }
@@ -907,7 +1324,9 @@ function calcularPreliquidacion_(tipo, valores) {
 
   var enabled = tipo.campos || {};
   var subtotal = 0;
-  if (enabled.saldoUvr && enabled.saldoUvr.enabled && enabled.valorUvr && enabled.valorUvr.enabled) {
+  if (usesMinimumWageCalculation_(tipo)) {
+    subtotal = cantidad * (tipo.smmlv || 0);
+  } else if (enabled.saldoUvr && enabled.saldoUvr.enabled && enabled.valorUvr && enabled.valorUvr.enabled) {
     subtotal = saldoUvr * valorUvr;
   } else if (enabled.saldoUvr && enabled.saldoUvr.enabled && enabled.cantidad && enabled.cantidad.enabled) {
     subtotal = saldoUvr * normalizeRate_(cantidad);
@@ -930,15 +1349,30 @@ function calcularPreliquidacion_(tipo, valores) {
   };
 }
 
+function usesMinimumWageCalculation_(tipo) {
+  return !!(tipo && tipo.campos && tipo.campos.cantidad && tipo.campos.cantidad.enabled && tipo.campos.cantidad.modo === 'salarios');
+}
+
 function normalizeRate_(value) {
   if (!value) return 0;
-  if (value >= 1) return value / 100;
-  return value;
+  return value / 100;
 }
 
 function parseNumber_(value) {
   if (typeof value === 'number') return value;
-  var text = toCleanString_(value).replace(/\$/g, '').replace(/\./g, '').replace(/,/g, '.').replace(/%/g, '');
+  var text = String(value || '').trim().replace(/[$\s%]/g, '');
+  if (!text) return 0;
+  var hasComma = text.indexOf(',') !== -1;
+  var hasDot = text.indexOf('.') !== -1;
+  if (hasComma && hasDot) {
+    text = text.replace(/\./g, '').replace(',', '.');
+  } else if (hasComma) {
+    text = text.replace(',', '.');
+  } else if (hasDot && text.indexOf('.') !== text.lastIndexOf('.')) {
+    text = text.replace(/\./g, '');
+  } else if (hasDot && text.charAt(0) !== '0' && /^\d{1,3}\.\d{3}$/.test(text)) {
+    text = text.replace(/\./g, '');
+  }
   return Number(text) || 0;
 }
 
@@ -958,8 +1392,14 @@ function notifyBillingPreliquidation_(book, usuario, nombreNegocio, radicacion, 
     'IVA: $' + calculo.ivaValor.toLocaleString('es-CO') + '\n' +
     'Total: $' + calculo.total.toLocaleString('es-CO') + '\n\n' +
     'Ingresa al Dashboard para dejar en firme la factura FIDUSAP: ' + CONFIG.DASHBOARD_URL;
+  var html = buildBillingPreliquidationHtml_(usuario, nombreNegocio, radicacion, tipoComision, calculo);
   emails.forEach(function(email) {
-    MailApp.sendEmail(email, subject, body);
+    MailApp.sendEmail({
+      to: email,
+      subject: subject,
+      body: body,
+      htmlBody: html
+    });
   });
   return emails.length;
 }
@@ -975,49 +1415,21 @@ function buildControlRowsMap_(datosControl) {
 }
 
 function registrarFacturacionPeriodo(radicaciones) {
-  var book = SpreadsheetApp.getActiveSpreadsheet();
-  var email = getCurrentUserEmail_();
-  var perfiles = getAdditionalProfiles_(book, email);
-  if (!isSuperAdmin_(email, perfiles) && perfiles.indexOf(ROLES.FACTURACION) === -1) {
-    throw new Error('Solo el perfil Facturación puede registrar periodos facturados.');
-  }
-
-  if (!Array.isArray(radicaciones) || radicaciones.length === 0) {
-    throw new Error('Selecciona al menos un negocio para marcar como facturado.');
-  }
-
-  var sheets = getRequiredSheets_(book);
-  var datosControl = sheets.control.getDataRange().getValues();
-  var estadosControl = buildControlStatusMap_(datosControl);
-  var facturadosPeriodo = buildCurrentPeriodBillingMap_(book);
-  var sheetFacturacion = getOrCreateBillingSheet_(book);
-  var period = getCurrentBillingPeriod_();
-  var now = new Date();
-  var rows = [];
-
-  radicaciones.forEach(function(radicacion) {
-    var clean = toCleanString_(radicacion);
-    var key = normalizeKey_(clean);
-    if (!clean || facturadosPeriodo[key]) return;
-    if ((estadosControl[key] || '').toLowerCase() !== 'activo') {
-      throw new Error('La radicación ' + clean + ' no está activa y no puede marcarse como facturada.');
-    }
-    rows.push([now, period, clean, email, 'Facturado']);
-  });
-
-  if (rows.length > 0) {
-    sheetFacturacion.getRange(sheetFacturacion.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-  }
-
-  return '✅ Se registraron ' + rows.length + ' negocios como facturados para el periodo ' + period + '.';
+  throw new Error('Este flujo fue reemplazado por la facturación consolidada del negocio. Registra factura, CUFE, fecha y valor desde la vista Facturación.');
 }
 
 function getOrCreateBillingSheet_(book) {
   var sheet = book.getSheetByName(CONFIG.SHEETS.FACTURACION);
   if (!sheet) {
     sheet = book.insertSheet(CONFIG.SHEETS.FACTURACION);
-    sheet.getRange(1, 1, 1, 5).setValues([['fecha_registro', 'periodo', 'radicacion', 'usuario', 'estado_facturacion']]);
   }
+  if (sheet.getMaxColumns() < 10) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), 10 - sheet.getMaxColumns());
+  }
+  sheet.getRange(1, 1, 1, 10).setValues([[
+    'fecha_registro', 'periodo', 'radicacion', 'usuario', 'estado_facturacion',
+    'codigo_fidusap', 'fecha_facturacion', 'valor_facturado', 'factura_fidusap', 'cufe'
+  ]]);
   return sheet;
 }
 
@@ -1074,40 +1486,19 @@ function sendBillingTeamStatusNotifications_(ejecutor, cambios, asignaciones, de
 
 function buildNotificationHtml_(ejecutor, items) {
   var rows = items.map(function(item) {
-    return '<tr>' +
-      '<td style="padding:14px 16px;border-bottom:1px solid #edf0f4;font-weight:700;color:#001391;">' + escapeHtml_(item.radicacion) + '</td>' +
-      '<td style="padding:14px 16px;border-bottom:1px solid #edf0f4;color:#020b5f;">' + escapeHtml_(item.nombre) + '</td>' +
-      '<td style="padding:14px 16px;border-bottom:1px solid #edf0f4;"><span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#e7f4ff;color:#001391;font-weight:700;">' + escapeHtml_(item.estado) + '</span></td>' +
-    '</tr>';
-  }).join('');
+    return [item.radicacion, item.nombre, item.estado];
+  });
 
-  return '<div style="margin:0;padding:0;background:#f3f4f6;font-family:Segoe UI,Arial,sans-serif;color:#020b5f;">' +
-    '<div style="max-width:760px;margin:0 auto;padding:28px;">' +
-      '<div style="background:#ffffff;border-radius:22px;overflow:hidden;box-shadow:0 18px 45px rgba(4,17,90,0.08);">' +
-        '<div style="background:#001391;color:#ffffff;padding:28px 32px;">' +
-          '<div style="font-size:42px;line-height:1;font-weight:800;margin-bottom:18px;">Λ</div>' +
-          '<h1 style="margin:0;font-size:24px;line-height:1.25;">Cambios de estado listos para validación de Facturación</h1>' +
-          '<p style="margin:12px 0 0;color:#d8ecff;font-size:14px;">Fidu Gestión · Sistema de alertas por lotes BBVA</p>' +
-        '</div>' +
-        '<div style="padding:28px 32px;">' +
-          '<p style="margin:0 0 16px;font-size:15px;line-height:1.55;">Hola equipo de <strong>Facturación</strong>,</p>' +
-          '<p style="margin:0 0 22px;font-size:15px;line-height:1.55;">El usuario BTM <strong>' + escapeHtml_(ejecutor) + '</strong> guardó un lote con modificaciones de estado desde el CRM Corporativo. Por favor valida las comisiones antes de continuar con la facturación.</p>' +
-          '<div style="background:#d8ecff;border-radius:16px;padding:16px 18px;margin-bottom:22px;color:#020b5f;">' +
-            '<strong>Resumen:</strong> ' + items.length + ' negocio(s) requieren revisión de Facturación.' +
-          '</div>' +
-          '<table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;background:#ffffff;border:1px solid #edf0f4;border-radius:14px;overflow:hidden;">' +
-            '<thead><tr style="background:#f7f8fa;text-align:left;">' +
-              '<th style="padding:12px 16px;color:#5d668a;font-size:12px;text-transform:uppercase;">Radicación</th>' +
-              '<th style="padding:12px 16px;color:#5d668a;font-size:12px;text-transform:uppercase;">Negocio</th>' +
-              '<th style="padding:12px 16px;color:#5d668a;font-size:12px;text-transform:uppercase;">Nuevo estado</th>' +
-            '</tr></thead>' +
-            '<tbody>' + rows + '</tbody>' +
-          '</table>' +
-          '<p style="margin:24px 0 0;font-size:14px;line-height:1.55;color:#5d668a;">Ingresa al portal para revisar los negocios activos, validar comisiones y marcar el periodo como facturado cuando corresponda.</p>' +
-        '</div>' +
-      '</div>' +
-    '</div>' +
-  '</div>';
+  return buildStandardAlertShellHtml_(
+    'Cambios de estado listos para validación de Facturación',
+    'CRM Fiduciaria BBVA · Sistema de alertas por lotes',
+    '<p style="font-size:17px;line-height:1.55;margin:0 0 18px;font-weight:800;">Hola equipo de Facturación,</p>' +
+    '<p style="font-size:16px;line-height:1.55;margin:0 0 14px;">El usuario BTM <strong>' + escapeHtml_(ejecutor) + '</strong> guardó un lote con modificaciones de estado desde el CRM Corporativo. Por favor valida las comisiones antes de continuar con la facturación.</p>' +
+    buildInfoBoxHtml_('<strong>Resumen:</strong> ' + items.length + ' negocio(s) requieren revisión de Facturación.') +
+    buildSimpleRowsTableHtml_(['Radicación', 'Negocio', 'Nuevo estado'], rows) +
+    buildDashboardButtonHtml_('Revisar negocios') +
+    '<p style="font-size:14px;line-height:1.55;margin:22px 0 0;color:#5d668a;">Gracias por tu gestión.</p>'
+  );
 }
 
 function escapeHtml_(value) {
@@ -1321,6 +1712,9 @@ function buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacion
     if (preliquidacionesPeriodoActual && preliquidacionesPeriodoActual[radKey]) continue;
 
     var esquema = interpretarTextoComision(datosControl[row][CONFIG.CONTROL_COLS.COMISION]);
+    var tipoGeneralNormalizado = normalizaTexto_(datosControl[row][CONFIG.CONTROL_COLS.TIPO]);
+    if (tipoGeneralNormalizado === 'variable') esquema = 'Variable';
+    if (tipoGeneralNormalizado === 'fija' || tipoGeneralNormalizado === 'fijo') esquema = 'Fija';
     if (esquema !== 'Variable') continue;
 
     var asignacion = asignaciones[radKey] || buildEmptyAssignment_();
