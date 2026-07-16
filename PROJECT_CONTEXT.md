@@ -348,3 +348,4 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Desde la versión 0.2.4, la bandeja BTM conserva visibles los contratos gestionados del periodo y los marca como `Preliquidado`/cerrados para mejorar trazabilidad de usuario.
 - Desde la versión 0.2.5, la bandeja incluye filtro por estado operativo y búsqueda por contrato/código/nombre para ubicar negocios específicos.
 - Desde la versión 0.2.6, `registrarNuevoNegocio()` guarda en `CONT/BTM` el código FIDUSAP en columna B y el nombre del negocio en columna D, sin cambiar el registro en `control`.
+- Desde la versión 0.2.7, el formulario `Crear negocio` agrupa `Tipos de comisión sugeridos`, `Descripción de comisiones` y el preview de preliquidación inicial al final para mantener alineadas las cajas operativas principales.

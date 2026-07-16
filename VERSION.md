@@ -2,9 +2,15 @@
 
 ## Versión actual
 
-- **Versión:** 0.2.6
+- **Versión:** 0.2.7
 - **Fecha:** 2026-07-16
-- **Entrega:** Corrige el alta de nuevos contratos en `CONT/BTM` para guardar Código Negocio FIDUSAP en columna B y Nombre del Negocio en columna D, manteniendo intacto el registro en `control`.
+- **Entrega:** Mejora UX/UI de `Crear negocio` agrupando tipos de comisión, descripción y preview de preliquidación inicial en una sección final dedicada para no desajustar las cajas principales del formulario.
+
+
+## 0.2.7
+
+- Reorganiza el formulario `Crear negocio` para mover `Tipos de comisión sugeridos`, `Descripción de comisiones` y el preview de preliquidación inicial a una sección final dedicada.
+- Ajusta estilos de la sección de comisiones para evitar que el selector múltiple desajuste las cajas principales del formulario.
 
 ## Política de versionado operativa
 

@@ -174,7 +174,12 @@
   .new-business-form { background: #fff; border-radius: 18px; box-shadow: var(--shadow-soft); padding: 22px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
   .new-business-form label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
   .new-business-form input, .new-business-form select, .new-business-form textarea { border: 1px solid var(--border-color); border-radius: 12px; color: var(--bbva-navy); font-weight: 700; padding: 11px 12px; font-family: inherit; resize: vertical; }
-  .new-business-form label:nth-child(7) { grid-column: span 3; }
+  .new-business-commission-section { grid-column: 1 / -1; border: 1px solid var(--border-color); border-radius: 16px; padding: 16px; background: #f8fbff; display: grid; gap: 14px; }
+  .commission-section-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .commission-section-header span { color: var(--bbva-navy); font-size: 14px; font-weight: 900; text-transform: uppercase; }
+  .commission-section-header small { color: var(--muted); font-size: 12px; font-weight: 700; line-height: 1.45; text-align: right; text-transform: none; max-width: 560px; }
+  .commission-section-grid { display: grid; grid-template-columns: minmax(260px, 0.85fr) minmax(320px, 1.15fr); gap: 14px; align-items: stretch; }
+  .commission-section-grid textarea { min-height: 132px; }
   .new-business-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
 
 
@@ -201,7 +206,10 @@
     .app-shell { height: auto; padding: 22px 18px 110px; }
     .profile-hero, .audit-card, .crm-card-row, .section-heading { flex-direction: column; align-items: stretch; }
     .utility-grid, .operation-data-grid, .preliquidation-columns, .preliq-fields, .new-business-form { grid-template-columns: 1fr; }
-    .new-business-form label:nth-child(7), .new-business-actions { grid-column: auto; }
+    .new-business-commission-section, .new-business-actions { grid-column: auto; }
+    .commission-section-header { flex-direction: column; }
+    .commission-section-header small { text-align: left; }
+    .commission-section-grid { grid-template-columns: 1fr; }
 
   .floating-batch-bar-crm { left: 18px; right: 18px; flex-direction: column; gap: 12px; align-items: stretch; }
   }
