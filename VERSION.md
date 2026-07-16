@@ -2,9 +2,9 @@
 
 ## Versión actual
 
-- **Versión:** 0.2.4
+- **Versión:** 0.2.5
 - **Fecha:** 2026-07-16
-- **Entrega:** Mantiene visibles para BTM los contratos ya gestionados del periodo, marcándolos como `Preliquidado` y bloqueando repetir preliquidación para una experiencia más consistente.
+- **Entrega:** Agrega filtros de bandeja por estado operativo y búsqueda por contrato/código/nombre para ubicar negocios específicos con mayor facilidad.
 
 ## Política de versionado operativa
 

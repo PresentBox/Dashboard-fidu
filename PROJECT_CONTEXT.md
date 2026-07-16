@@ -345,3 +345,4 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Desde la versión 0.2.2, no hay correos bootstrap de Súper Admin en `Code.gs`; el perfil Súper Admin debe existir en `usuarios`.
 - Desde la versión 0.2.3, los mapas de facturación, liquidación y preliquidación normalizan periodos tipo fecha o texto `yyyy-MM` para reconocer correctamente registros del periodo actual.
 - Desde la versión 0.2.4, la bandeja BTM conserva visibles los contratos gestionados del periodo y los marca como `Preliquidado`/cerrados para mejorar trazabilidad de usuario.
+- Desde la versión 0.2.5, la bandeja incluye filtro por estado operativo y búsqueda por contrato/código/nombre para ubicar negocios específicos.

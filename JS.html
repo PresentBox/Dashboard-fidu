@@ -241,6 +241,21 @@
     selectFiltro.id = 'cmbFiltroComision';
     selectFiltro.onchange = cambiarPerfilDeVista;
     selectFiltro.innerHTML = '<option value="TODAS">🔍 Todas las Comisiones</option><option value="Variable">Solo Variables</option><option value="Fija">Solo Fijas</option>';
+
+    var selectEstado = document.createElement('select');
+    selectEstado.id = 'cmbFiltroEstado';
+    selectEstado.onchange = cambiarPerfilDeVista;
+    selectEstado.innerHTML = '<option value="TODOS">Todos los estados</option><option value="Activo">Activos</option><option value="PRELIQUIDADO">Preliquidados</option><option value="PENDIENTE">Pendientes</option><option value="Inactivo">Inactivos</option><option value="En Liquidación">En liquidación</option>';
+
+    var buscador = document.createElement('input');
+    buscador.id = 'txtBuscarContrato';
+    buscador.type = 'search';
+    buscador.placeholder = 'Buscar contrato, código o negocio';
+    buscador.setAttribute('aria-label', 'Buscar contrato');
+    buscador.oninput = cambiarPerfilDeVista;
+
+    cajaSelector.appendChild(buscador);
+    cajaSelector.appendChild(selectEstado);
     cajaSelector.appendChild(selectFiltro);
   }
 
@@ -256,6 +271,8 @@
 
     var vista = getSelectValue('cmbPerfilVista', cacheDatos.esAdmin ? 'TODOS' : (cacheDatos.esFacturacion ? 'FACTURACION' : 'BTM'));
     var filterComision = getSelectValue('cmbFiltroComision', 'TODAS');
+    var filterEstado = getSelectValue('cmbFiltroEstado', 'TODOS');
+    var busquedaContrato = normalizarTextoPlano_(getInputValue('txtBuscarContrato', ''));
     var lista = cacheDatos.listaContratos || [];
     var contenedor = document.getElementById('workspaceExpedientes');
     var fragment = document.createDocumentFragment();
@@ -266,7 +283,7 @@
     document.getElementById('loader').style.display = 'none';
 
     lista.forEach(function(item) {
-      if (!debeMostrarContrato(item, vista, filterComision)) return;
+      if (!debeMostrarContrato(item, vista, filterComision, filterEstado, busquedaContrato)) return;
       contratosVisibles.push(item);
       try {
         contadorProcesados++;
@@ -313,7 +330,7 @@
     setText('m8', metricas.totalContratosComision);
   }
 
-  function debeMostrarContrato(item, vista, filterComision) {
+  function debeMostrarContrato(item, vista, filterComision, filterEstado, busquedaContrato) {
     var mostrarFila = false;
 
     if (vista === 'FACTURACION' && cacheDatos.esFacturacion) {
@@ -331,6 +348,28 @@
 
     if (filterComision !== 'TODAS' && item.esquemaComision !== filterComision) {
       mostrarFila = false;
+    }
+
+    if (filterEstado !== 'TODOS') {
+      if (filterEstado === 'PRELIQUIDADO') {
+        mostrarFila = mostrarFila && Boolean(item.preliquidadoPeriodoActual || item.liquidacionCerradaPeriodoActual);
+      } else if (filterEstado === 'PENDIENTE') {
+        mostrarFila = mostrarFila && normalizarEstado(item.estadoActual) === 'activo' && !item.preliquidadoPeriodoActual && !item.liquidacionCerradaPeriodoActual;
+      } else {
+        mostrarFila = mostrarFila && normalizarEstado(item.estadoActual) === normalizarEstado(filterEstado);
+      }
+    }
+
+    if (busquedaContrato) {
+      var textoContrato = normalizarTextoPlano_([
+        item.radicacion,
+        item.codigoFidusap,
+        item.nombreNegocio,
+        item.nombreNegocioControl,
+        item.nitNombreControl,
+        item.descripcionComisiones
+      ].join(' '));
+      mostrarFila = mostrarFila && textoContrato.indexOf(busquedaContrato) !== -1;
     }
 
     return mostrarFila;
@@ -1184,6 +1223,11 @@
   }
 
   function getSelectValue(id, fallback) {
+    var element = document.getElementById(id);
+    return element ? element.value : fallback;
+  }
+
+  function getInputValue(id, fallback) {
     var element = document.getElementById(id);
     return element ? element.value : fallback;
   }

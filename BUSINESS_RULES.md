@@ -226,3 +226,11 @@
 - **Datos:** `control` columna H.
 - **Resultado esperado:** La UI muestra bloqueo y el backend rechaza cualquier intento de preliquidar negocios no activos.
 - **Riesgo si se modifica:** Alto; puede permitir facturación sobre negocios no activos.
+
+## BR-24 — Filtros operativos de bandeja
+
+- **Descripción:** La bandeja permite filtrar por tipo de comisión, estado operativo (`Activo`, `Preliquidado`, `Pendiente`, `Inactivo`, `En Liquidación`) y buscar por radicación, código FIDUSAP o nombre/descripción del negocio.
+- **Archivo y función:** `JS.html`, `asegurarFiltroComision()`, `cambiarPerfilDeVista()`, `debeMostrarContrato()`.
+- **Datos:** `listaContratos` retornada por `Code.gs`.
+- **Resultado esperado:** El usuario puede ubicar contratos específicos sin alterar la lógica de permisos ni los cálculos de preliquidación.
+- **Riesgo si se modifica:** Medio; puede ocultar registros en UI si los filtros se aplican incorrectamente.
