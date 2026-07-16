@@ -3,6 +3,7 @@
   var usuarioAuditadoEmail = null;
   var loteCambiosPendientes = {};
   var facturacionSeleccionada = {};
+  var lotePreliquidacionesPendientes = [];
   var datosListosParaIngreso = false;
 
   window.addEventListener('load', function() {
@@ -27,6 +28,7 @@
     setText('avatarLetra', respuesta.usuario.substring(0, 1).toUpperCase());
     setText('avatarLetraHero', respuesta.usuario.substring(0, 1).toUpperCase());
     setText('txtSaludando', obtenerNombreUsuario(respuesta.usuario));
+    setText('appVersionBadge', 'v' + (respuesta.version || '-'));
     setText('m1', respuesta.metricas.totalActivos);
     setText('m2', respuesta.metricas.totalVariables);
     setText('m3', respuesta.metricas.discrepancias);
@@ -43,6 +45,7 @@
     configurarEventos();
     asegurarFiltroComision();
     poblarTiposComisionNuevoNegocio(respuesta.tiposComision || []);
+    poblarCatalogosAsignacion(respuesta.catalogosAsignacion || {});
     cambiarPerfilDeVista();
   }
 
@@ -132,12 +135,101 @@
   function poblarTiposComisionNuevoNegocio(tipos) {
     var select = document.getElementById('newBusinessCommissionType');
     if (!select) return;
-    select.innerHTML = '<option value="">Selecciona tipo de comisión</option>';
+    select.innerHTML = '';
     tipos.forEach(function(tipo) {
       var option = document.createElement('option');
       option.value = tipo.tipo;
       option.textContent = tipo.tipo;
       select.appendChild(option);
+    });
+    select.onchange = renderPreviewComisionesNuevoNegocio;
+    renderPreviewComisionesNuevoNegocio();
+  }
+
+  function renderPreviewComisionesNuevoNegocio() {
+    var select = document.getElementById('newBusinessCommissionType');
+    var contenedor = document.getElementById('newBusinessCommissionPreview');
+    if (!select || !contenedor) return;
+    var seleccionados = Array.prototype.map.call(select.selectedOptions || [], function(option) { return option.value; }).filter(Boolean);
+    contenedor.innerHTML = '';
+    if (!seleccionados.length) {
+      contenedor.innerHTML = '<div class="preliq-help">Selecciona un tipo de comisión para ver los datos que se deben capturar y calcular el valor estimado.</div>';
+      return;
+    }
+    seleccionados.forEach(function(nombreTipo) {
+      var tipo = obtenerTipoComision(nombreTipo);
+      if (!tipo) return;
+      var card = document.createElement('div');
+      card.className = 'preliquidation-chip new-business-preview-card';
+      card.dataset.tipoComision = nombreTipo;
+      var titulo = document.createElement('strong');
+      titulo.textContent = nombreTipo;
+      var descripcion = document.createElement('span');
+      descripcion.textContent = (tipo.descripcion || 'Sin descripción de cálculo configurada.') + ' Si diligencias valores, se guardará como preliquidación inicial al crear el negocio.';
+      var campos = document.createElement('div');
+      campos.className = 'preliq-fields';
+      var total = document.createElement('div');
+      total.className = 'preliq-total-preview';
+
+      function actualizarTotal() {
+        var valores = leerValoresPreliq(campos);
+        var desglose = calcularPreviewPreliqDesglosado(tipo, valores);
+        total.textContent = 'Subtotal: ' + formatoMoneda(desglose.subtotal) + ' | IVA 19%: ' + formatoMoneda(desglose.iva) + ' | Total estimado: ' + formatoMoneda(desglose.total);
+      }
+
+      Object.keys(tipo.campos || {}).forEach(function(key) {
+        var campo = tipo.campos[key];
+        if (!campo.enabled || key === 'iva') return;
+        var label = document.createElement('label');
+        label.className = 'preliq-field';
+        label.innerHTML = '<span></span><input type="number" step="0.01" min="0">';
+        label.querySelector('span').textContent = campo.label + (campo.ejemplo ? ' · Ej: ' + campo.ejemplo : '');
+        var input = label.querySelector('input');
+        input.dataset.key = key;
+        input.placeholder = campo.ejemplo || '';
+        input.oninput = actualizarTotal;
+        campos.appendChild(label);
+      });
+
+      card.appendChild(titulo);
+      card.appendChild(descripcion);
+      card.appendChild(campos);
+      card.appendChild(total);
+      contenedor.appendChild(card);
+      actualizarTotal();
+    });
+  }
+
+  function leerPreliquidacionesInicialesNuevoNegocio() {
+    var paquetes = [];
+    Array.prototype.forEach.call(document.querySelectorAll('#newBusinessCommissionPreview .new-business-preview-card'), function(card) {
+      var valores = leerValoresPreliq(card);
+      var tieneValores = Object.keys(valores).some(function(key) {
+        return key !== 'iva' && Number(valores[key]) > 0;
+      });
+      if (!tieneValores) return;
+      paquetes.push({
+        tipoComision: card.dataset.tipoComision,
+        valores: valores
+      });
+    });
+    return paquetes;
+  }
+
+  function poblarCatalogosAsignacion(catalogos) {
+    poblarDatalist('gerentesBtmList', catalogos.gerentesBtm || []);
+    poblarDatalist('profesionalesBtmList', catalogos.profesionalesBtm || []);
+    poblarDatalist('profesionalesContablesList', catalogos.profesionalesContables || []);
+  }
+
+  function poblarDatalist(id, emails) {
+    var list = document.getElementById(id);
+    if (!list) return;
+    list.innerHTML = '';
+    emails.forEach(function(email) {
+      var option = document.createElement('option');
+      option.value = email;
+      list.appendChild(option);
     });
   }
 
@@ -149,6 +241,21 @@
     selectFiltro.id = 'cmbFiltroComision';
     selectFiltro.onchange = cambiarPerfilDeVista;
     selectFiltro.innerHTML = '<option value="TODAS">🔍 Todas las Comisiones</option><option value="Variable">Solo Variables</option><option value="Fija">Solo Fijas</option>';
+
+    var selectEstado = document.createElement('select');
+    selectEstado.id = 'cmbFiltroEstado';
+    selectEstado.onchange = cambiarPerfilDeVista;
+    selectEstado.innerHTML = '<option value="TODOS">Todos los estados</option><option value="Activo">Activos</option><option value="PRELIQUIDADO">Preliquidados</option><option value="PENDIENTE">Pendientes</option><option value="Inactivo">Inactivos</option><option value="En Liquidación">En liquidación</option>';
+
+    var buscador = document.createElement('input');
+    buscador.id = 'txtBuscarContrato';
+    buscador.type = 'search';
+    buscador.placeholder = 'Buscar contrato, código o negocio';
+    buscador.setAttribute('aria-label', 'Buscar contrato');
+    buscador.oninput = cambiarPerfilDeVista;
+
+    cajaSelector.appendChild(buscador);
+    cajaSelector.appendChild(selectEstado);
     cajaSelector.appendChild(selectFiltro);
   }
 
@@ -164,6 +271,8 @@
 
     var vista = getSelectValue('cmbPerfilVista', cacheDatos.esAdmin ? 'TODOS' : (cacheDatos.esFacturacion ? 'FACTURACION' : 'BTM'));
     var filterComision = getSelectValue('cmbFiltroComision', 'TODAS');
+    var filterEstado = getSelectValue('cmbFiltroEstado', 'TODOS');
+    var busquedaContrato = normalizarTextoPlano_(getInputValue('txtBuscarContrato', ''));
     var lista = cacheDatos.listaContratos || [];
     var contenedor = document.getElementById('workspaceExpedientes');
     var fragment = document.createDocumentFragment();
@@ -174,7 +283,7 @@
     document.getElementById('loader').style.display = 'none';
 
     lista.forEach(function(item) {
-      if (!debeMostrarContrato(item, vista, filterComision)) return;
+      if (!debeMostrarContrato(item, vista, filterComision, filterEstado, busquedaContrato)) return;
       contratosVisibles.push(item);
       try {
         contadorProcesados++;
@@ -204,7 +313,7 @@
       if (item.esquemaComision === 'Variable' || item.esquemaComision === 'Fija') acc.totalContratosComision++;
       if (item.validacionSFC !== 'OK') acc.discrepancias++;
       if (cacheDatos.esFacturacion) {
-        if (normalizarEstado(item.estadoActual) === 'activo' && !item.facturadoPeriodoActual) acc.pendientesFacturacionPeriodo++;
+        if (tienePreliquidacionesPorFacturar(item)) acc.pendientesFacturacionPeriodo++;
       } else if (item.esquemaComision === 'Variable' && normalizarEstado(item.estadoActual) === 'activo' && !item.preliquidadoPeriodoActual && !item.liquidacionCerradaPeriodoActual) {
         acc.pendientesFacturacionPeriodo++;
       }
@@ -221,7 +330,7 @@
     setText('m8', metricas.totalContratosComision);
   }
 
-  function debeMostrarContrato(item, vista, filterComision) {
+  function debeMostrarContrato(item, vista, filterComision, filterEstado, busquedaContrato) {
     var mostrarFila = false;
 
     if (vista === 'FACTURACION' && cacheDatos.esFacturacion) {
@@ -235,12 +344,32 @@
 
     if (estaEnVistaFacturacion()) {
       mostrarFila = tienePreliquidacionesPorFacturar(item);
-    } else if (item.esquemaComision === 'Variable' && (item.preliquidadoPeriodoActual || item.liquidacionCerradaPeriodoActual)) {
-      mostrarFila = false;
     }
 
     if (filterComision !== 'TODAS' && item.esquemaComision !== filterComision) {
       mostrarFila = false;
+    }
+
+    if (filterEstado !== 'TODOS') {
+      if (filterEstado === 'PRELIQUIDADO') {
+        mostrarFila = mostrarFila && Boolean(item.preliquidadoPeriodoActual || item.liquidacionCerradaPeriodoActual);
+      } else if (filterEstado === 'PENDIENTE') {
+        mostrarFila = mostrarFila && normalizarEstado(item.estadoActual) === 'activo' && !item.preliquidadoPeriodoActual && !item.liquidacionCerradaPeriodoActual;
+      } else {
+        mostrarFila = mostrarFila && normalizarEstado(item.estadoActual) === normalizarEstado(filterEstado);
+      }
+    }
+
+    if (busquedaContrato) {
+      var textoContrato = normalizarTextoPlano_([
+        item.radicacion,
+        item.codigoFidusap,
+        item.nombreNegocio,
+        item.nombreNegocioControl,
+        item.nitNombreControl,
+        item.descripcionComisiones
+      ].join(' '));
+      mostrarFila = mostrarFila && textoContrato.indexOf(busquedaContrato) !== -1;
     }
 
     return mostrarFila;
@@ -394,6 +523,14 @@
   function crearFormularioPreliquidacion(item) {
     var form = document.createElement('div');
     form.className = 'preliquidation-form';
+    if (normalizarEstado(item.estadoActual) !== 'activo') {
+      form.innerHTML = '<div class="preliq-help"><strong>Preliquidación bloqueada:</strong> el negocio está ' + escapeHtml(item.estadoActual) + ' y solo puede visualizarse.</div>';
+      return form;
+    }
+    if (item.preliquidadoPeriodoActual || item.liquidacionCerradaPeriodoActual) {
+      form.innerHTML = '<div class="preliq-help"><strong>Preliquidación cerrada:</strong> este negocio ya tiene gestión del periodo actual.</div>';
+      return form;
+    }
     if (!cacheDatos.tiposComision || !cacheDatos.tiposComision.length) {
       form.textContent = 'No se encontró la pestaña "Tabla de comisiones" o no tiene tipos configurados desde la fila 4.';
       return form;
@@ -494,6 +631,17 @@
       }
       generarPreliquidaciones(item.radicacion, pendientes, botonGuardar);
     };
+
+    var botonLoteGlobal = document.createElement('button');
+    botonLoteGlobal.className = 'crm-btn close-liquidation-btn';
+    botonLoteGlobal.type = 'button';
+    botonLoteGlobal.innerHTML = '<i class="fa-solid fa-layer-group"></i> Agregar al lote general';
+    botonLoteGlobal.onclick = function() {
+      if (!pendientes.length && select.value) {
+        botonAgregar.onclick();
+      }
+      agregarPreliquidacionesALoteGlobal(item.radicacion, pendientes);
+    };
     select.onchange = renderFields;
 
     form.appendChild(select);
@@ -506,6 +654,7 @@
     form.appendChild(botonAgregar);
     form.appendChild(listaPendientes);
     form.appendChild(totalPendientes);
+    form.appendChild(botonLoteGlobal);
     form.appendChild(botonGuardar);
     return form;
   }
@@ -591,7 +740,61 @@
     }
 
     fila.appendChild(zona);
+    if (!estaEnVistaFacturacion() && puedeUsuarioReasignarBtm(item)) {
+      fila.appendChild(crearBloqueReasignacionBtm(item));
+    }
     return fila;
+  }
+
+  function puedeUsuarioReasignarBtm(item) {
+    return cacheDatos && cacheDatos.usuario && (item.asignados.GerenteBTM === cacheDatos.usuario || item.asignados.ProfesionalBTM === cacheDatos.usuario || item.asignados.ProfesionalSujeto === cacheDatos.usuario);
+  }
+
+  function crearBloqueReasignacionBtm(item) {
+    var wrapper = document.createElement('div');
+    wrapper.className = 'preliq-field';
+    wrapper.innerHTML = '<span>Reasignación temporal BTM</span>';
+    var gerente = document.createElement('input');
+    gerente.type = 'email';
+    gerente.placeholder = 'Nuevo gerente BTM';
+    gerente.setAttribute('list', 'gerentesBtmList');
+    var profesional = document.createElement('input');
+    profesional.type = 'email';
+    profesional.placeholder = 'Nuevo profesional BTM';
+    profesional.setAttribute('list', 'profesionalesBtmList');
+    var boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'crm-btn close-liquidation-btn';
+    boton.innerHTML = '<i class="fa-solid fa-user-pen"></i> Reasignar BTM';
+    boton.onclick = function() {
+      reasignarBtmNegocio(item.radicacion, gerente.value, profesional.value, boton);
+    };
+    wrapper.appendChild(gerente);
+    wrapper.appendChild(profesional);
+    wrapper.appendChild(boton);
+    return wrapper;
+  }
+
+  function reasignarBtmNegocio(radicacion, gerenteBtm, profesionalBtm, boton) {
+    if (!gerenteBtm && !profesionalBtm) {
+      alert('Selecciona al menos un correo para reasignar.');
+      return;
+    }
+    if (boton) boton.disabled = true;
+    mostrarProceso('Guardando reasignación temporal BTM...');
+    google.script.run
+      .withSuccessHandler(function(respuesta) {
+        ocultarProceso();
+        alert(respuesta);
+        if (boton) boton.disabled = false;
+        cargarEcosistemaCRM();
+      })
+      .withFailureHandler(function(err) {
+        ocultarProceso();
+        alert('Error al reasignar BTM: ' + err.message);
+        if (boton) boton.disabled = false;
+      })
+      .reasignarBtmNegocio({ radicacion: radicacion, gerenteBtm: gerenteBtm, profesionalBtm: profesionalBtm });
   }
 
   function crearInputMonto(radicacion) {
@@ -651,7 +854,7 @@
     var campos = tipo.campos || {};
     var subtotal = 0;
     if (campos.saldoUvr && campos.saldoUvr.enabled && campos.valorUvr && campos.valorUvr.enabled) subtotal = valores.saldoUvr * valores.valorUvr;
-    else if (campos.saldoUvr && campos.saldoUvr.enabled && campos.cantidad && campos.cantidad.enabled) subtotal = valores.saldoUvr * normalizarPorcentaje(valores.cantidad);
+    else if (campos.saldoUvr && campos.saldoUvr.enabled && campos.cantidad && campos.cantidad.enabled) subtotal = valores.saldoUvr * (campos.cantidad.modo === 'porcentaje' ? normalizarPorcentaje(valores.cantidad) : (valores.cantidad || 1));
     else if (campos.valorUvr && campos.valorUvr.enabled && campos.cantidad && campos.cantidad.enabled) subtotal = valores.valorUvr * (campos.cantidad.modo === 'porcentaje' ? normalizarPorcentaje(valores.cantidad) : (valores.cantidad || 1));
     else if (campos.valorUvr && campos.valorUvr.enabled) subtotal = valores.valorUvr;
     else if (campos.cantidad && campos.cantidad.enabled) subtotal = valores.cantidad * (tipo.smmlv || 0);
@@ -662,11 +865,62 @@
 
   function normalizarPorcentaje(valor) {
     if (!valor) return 0;
-    return valor >= 1 ? valor / 100 : valor;
+    return valor / 100;
   }
 
   function formatoMoneda(valor) {
     return '$' + (Number(valor) || 0).toLocaleString('es-CO');
+  }
+
+  function agregarPreliquidacionesALoteGlobal(radicacion, pendientes) {
+    if (!pendientes.length) {
+      alert('Agrega al menos un tipo de comisión antes de llevarlo al lote general.');
+      return;
+    }
+    pendientes.forEach(function(item) {
+      lotePreliquidacionesPendientes.push({ radicacion: radicacion, tipoComision: item.tipoComision, valores: item.valores });
+    });
+    alert('Se agregaron ' + pendientes.length + ' preliquidación(es) al lote general. Puedes seguir con otros negocios y guardar todo al final.');
+    actualizarBarraPreliquidacionesUI();
+  }
+
+  function actualizarBarraPreliquidacionesUI() {
+    var barra = document.getElementById('preliquidacionActionBar');
+    if (!barra) {
+      barra = document.createElement('div');
+      barra.id = 'preliquidacionActionBar';
+      barra.className = 'floating-batch-bar-crm hidden';
+      barra.innerHTML = '<div class="batch-summary"><div class="batch-counter-badge-crm" id="txtPreliqCount">0</div><div>Preliquidaciones preparadas para guardar en lote</div></div><button id="btnGuardarPreliqLote" class="crm-btn save-batch-btn" type="button"><i class="fa-solid fa-calculator"></i> Guardar lote de preliquidaciones</button>';
+      document.getElementById('appShell').appendChild(barra);
+      document.getElementById('btnGuardarPreliqLote').onclick = guardarLotePreliquidaciones;
+    }
+    setText('txtPreliqCount', lotePreliquidacionesPendientes.length);
+    barra.classList.toggle('hidden', lotePreliquidacionesPendientes.length === 0);
+  }
+
+  function guardarLotePreliquidaciones() {
+    if (!lotePreliquidacionesPendientes.length) {
+      alert('No hay preliquidaciones preparadas para guardar.');
+      return;
+    }
+    var boton = document.getElementById('btnGuardarPreliqLote');
+    if (boton) boton.disabled = true;
+    mostrarProceso('Guardando lote de preliquidaciones y notificando a Facturación...');
+    google.script.run
+      .withSuccessHandler(function(respuesta) {
+        ocultarProceso();
+        alert(respuesta.mensaje || 'Lote de preliquidaciones registrado.');
+        lotePreliquidacionesPendientes = [];
+        actualizarBarraPreliquidacionesUI();
+        if (boton) boton.disabled = false;
+        cargarEcosistemaCRM();
+      })
+      .withFailureHandler(function(err) {
+        ocultarProceso();
+        alert('Error al guardar lote de preliquidaciones: ' + err.message);
+        if (boton) boton.disabled = false;
+      })
+      .registrarPreliquidacionesContrato(lotePreliquidacionesPendientes);
   }
 
   function generarPreliquidaciones(radicacion, pendientes, boton) {
@@ -925,16 +1179,23 @@
     var form = event.target;
     var payload = {};
     Array.prototype.forEach.call(form.elements, function(field) {
-      if (field.name) payload[field.name] = field.value;
+      if (!field.name) return;
+      if (field.multiple) {
+        payload[field.name] = Array.prototype.map.call(field.selectedOptions, function(option) { return option.value; }).filter(Boolean);
+      } else {
+        payload[field.name] = field.value;
+      }
     });
+    payload.preliquidacionesIniciales = leerPreliquidacionesInicialesNuevoNegocio();
     var boton = document.getElementById('btnCrearNegocio');
     if (boton) boton.disabled = true;
-    mostrarProceso('Creando negocio y asignaciones...');
+    mostrarProceso(payload.preliquidacionesIniciales.length ? 'Creando negocio y guardando preliquidación inicial...' : 'Creando negocio y asignaciones...');
     google.script.run
       .withSuccessHandler(function(respuesta) {
         ocultarProceso();
         alert(respuesta);
         form.reset();
+        renderPreviewComisionesNuevoNegocio();
         if (boton) boton.disabled = false;
         cargarEcosistemaCRM();
         mostrarDashboard();
@@ -962,6 +1223,11 @@
   }
 
   function getSelectValue(id, fallback) {
+    var element = document.getElementById(id);
+    return element ? element.value : fallback;
+  }
+
+  function getInputValue(id, fallback) {
     var element = document.getElementById(id);
     return element ? element.value : fallback;
   }

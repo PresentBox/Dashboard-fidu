@@ -9,7 +9,7 @@
   - Obtener día del mes según `Session.getScriptTimeZone()`.
   - Si `día <= CONFIG.PERIOD_CUTOFF_DAY` (2), usar mes anterior.
   - Si `día >= 3`, usar mes actual.
-  - Formato: `yyyy-MM`.
+  - Formato: `yyyy-MM`; al leer hojas históricas se normalizan periodos guardados como texto o como fecha interpretada por Google Sheets.
 - **Entradas:** Fecha actual del script.
 - **Salida:** Periodo operativo string.
 - **Redondeo:** No aplica.
@@ -69,24 +69,24 @@
 - **Redondeo:** No aplica.
 - **Vacíos:** Si no hay texto relevante, `cantidad`.
 - **Casos límite:** La inferencia depende del texto exacto.
-- **Relación frontend/backend:** Backend envía `modo`; frontend lo usa para preview.
+- **Relación frontend/backend:** Backend envía `modo`; frontend lo usa para preview. En modo porcentaje, el valor de entrada conserva el número leído/escrito y la división entre 100 ocurre en la normalización porcentual.
 
 ## 6. Normalización de porcentaje
 
 - **Archivos y funciones:** `Code.gs`, `normalizeRate_()`; `JS.html`, `normalizarPorcentaje()`.
 - **Fórmula:**
   - Si valor vacío o 0 → 0.
-  - Si valor `>= 1` → valor / 100.
-  - Si valor `< 1` → valor tal cual.
+  - Todo valor no cero se interpreta como porcentaje escrito por el usuario y se divide entre 100.
 - **Entradas:** Valor de campo en modo porcentaje.
 - **Salida:** Tasa decimal.
 - **Redondeo:** No aplica.
 - **Vacíos:** Retorna 0.
 - **Ejemplos comprobables:**
-  - `1` → `0.01`.
-  - `3` → `0.03`.
-  - `0.03` → `0.03`.
-- **Casos límite:** `0.65` en campo porcentual se interpreta como 65%, no 0.65%, porque es menor a 1 y queda tal cual.
+  - `1` → `0.01` (1%).
+  - `3` → `0.03` (3%).
+  - `0.3` → `0.003` (0.3%).
+  - `0.05` → `0.0005` (0.05%).
+- **Casos límite:** `0.65` en campo porcentual se interpreta como 0.65% (`0.0065`), mientras que en modo salarios sigue siendo 0.65 × SMMLV.
 - **Relación frontend/backend:** Ambos implementan la misma regla.
 
 ## 7. Cálculo de preliquidación — backend
@@ -189,7 +189,10 @@
 - **Archivo y función:** `Code.gs`, `parseNumber_(value)`.
 - **Fórmula:**
   - Si ya es number, retorna el valor.
-  - Convierte string quitando `$`, puntos, cambiando coma por punto y quitando `%`.
+  - Convierte string quitando `$`, espacios y `%`.
+  - Si hay coma y punto, asume formato colombiano (`1.234,56`) y quita puntos de miles.
+  - Si solo hay coma, la usa como separador decimal.
+  - Si solo hay punto, conserva decimales como `0.015`; si el texto usa puntos de miles claros como `1.234.567` o `100.000`, los normaliza a entero.
   - `Number(text) || 0`.
 - **Entradas:** Número o string.
 - **Resultado:** Número.
