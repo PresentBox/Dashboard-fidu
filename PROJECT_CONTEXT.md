@@ -202,7 +202,7 @@ No renombrar estas funciones sin actualizar `JS.html`.
 - `control` es fuente de verdad de estado del negocio.
 - `INV SFC` se usa como respaldo para alertar discrepancias.
 - Facturación se configura por hoja `usuarios`.
-- Súper Admin puede venir de `usuarios` o de bootstrap de emergencia.
+- Súper Admin se lee desde la hoja `usuarios`; ya no existe lista bootstrap de Súper Admin en código.
 - BTM/profesional/gerente solo actúan sobre contratos asignados.
 - Facturación puede ver todos los negocios/preliquidaciones que correspondan a su flujo.
 - Contratos variables preliquidados para el periodo se ocultan de la bandeja BTM.
@@ -270,13 +270,13 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Las hojas auxiliares se crean automáticamente si faltan para evitar fallos operativos.
 - Las reglas de periodo se calculan en backend, no en frontend.
 - El frontend recalcula métricas según vista/filtro visible.
-- Se conserva una lista bootstrap de Súper Admin por seguridad operativa.
+- No se conserva lista bootstrap de Súper Admin en código; los perfiles privilegiados deben mantenerse en la hoja `usuarios`.
 
 ## 18. Funcionalidades terminadas
 
 - Web app renderizable por Apps Script.
 - Carga de contratos y métricas.
-- Roles básicos y perfiles adicionales.
+- Roles básicos y perfiles adicionales desde `usuarios`.
 - Auditoría por usuario para Súper Admin.
 - Vista BTM y vista Facturación.
 - Preliquidación por uno o varios tipos de comisión.
@@ -324,14 +324,22 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 3. Definir si se permite más de una preliquidación del mismo tipo por radicación/periodo.
 4. Crear pruebas controladas para cada tipo de comisión.
 5. Confirmar si `ejecutarAccionServidor()` debe persistir una liquidación formal.
-6. Evaluar mover parámetros como URL, admins bootstrap y corte de periodo a configuración externa.
+6. Evaluar mover parámetros como URL, correo de pruebas y corte de periodo a configuración externa.
 
 
 ## 23. Actualización de comportamiento — nuevo negocio y preliquidación por lote
 
-- El formulario de nuevo negocio permite seleccionar uno o varios tipos de comisión sugeridos y limita `Tipo general` a `Fija` o `Variable`.
+- El formulario Crear negocio permite seleccionar uno o varios tipos de comisión sugeridos, limita `Tipo general` a `Fija` o `Variable`, muestra campos/preview de cálculo y guarda preliquidaciones iniciales cuando se capturan valores.
 - Los campos de asignación BTM/contable usan catálogos de correos existentes construidos desde `CONT/BTM`.
 - Al crear un negocio, el sistema notifica por correo al gerente BTM y profesional BTM asignados.
 - Los negocios inactivos o en liquidación se visualizan para el BTM asignado, pero la preliquidación queda bloqueada.
 - El BTM actualmente asignado puede reasignar temporalmente gerente/profesional BTM desde la tarjeta del negocio.
 - El frontend permite preparar preliquidaciones de uno o varios negocios y guardarlas en un lote general.
+
+
+## 24. Versionado operativo
+
+- La aplicación expone `CONFIG.APP_VERSION` desde `Code.gs` y lo muestra en la UI como badge junto al título.
+- `VERSION.md` mantiene el historial operativo de entregas.
+- Cada cambio funcional debe incrementar la versión para facilitar validación entre GitHub y Apps Script.
+- Desde la versión 0.2.2, no hay correos bootstrap de Súper Admin en `Code.gs`; el perfil Súper Admin debe existir en `usuarios`.

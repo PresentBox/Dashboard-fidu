@@ -28,6 +28,7 @@
     setText('avatarLetra', respuesta.usuario.substring(0, 1).toUpperCase());
     setText('avatarLetraHero', respuesta.usuario.substring(0, 1).toUpperCase());
     setText('txtSaludando', obtenerNombreUsuario(respuesta.usuario));
+    setText('appVersionBadge', 'v' + (respuesta.version || '-'));
     setText('m1', respuesta.metricas.totalActivos);
     setText('m2', respuesta.metricas.totalVariables);
     setText('m3', respuesta.metricas.discrepancias);
@@ -160,10 +161,11 @@
       if (!tipo) return;
       var card = document.createElement('div');
       card.className = 'preliquidation-chip new-business-preview-card';
+      card.dataset.tipoComision = nombreTipo;
       var titulo = document.createElement('strong');
       titulo.textContent = nombreTipo;
       var descripcion = document.createElement('span');
-      descripcion.textContent = tipo.descripcion || 'Sin descripción de cálculo configurada.';
+      descripcion.textContent = (tipo.descripcion || 'Sin descripción de cálculo configurada.') + ' Si diligencias valores, se guardará como preliquidación inicial al crear el negocio.';
       var campos = document.createElement('div');
       campos.className = 'preliq-fields';
       var total = document.createElement('div');
@@ -184,7 +186,7 @@
         label.querySelector('span').textContent = campo.label + (campo.ejemplo ? ' · Ej: ' + campo.ejemplo : '');
         var input = label.querySelector('input');
         input.dataset.key = key;
-        input.value = campo.valorEntrada || campo.valor || '';
+        input.placeholder = campo.ejemplo || '';
         input.oninput = actualizarTotal;
         campos.appendChild(label);
       });
@@ -198,21 +200,20 @@
     });
   }
 
-  function poblarCatalogosAsignacion(catalogos) {
-    poblarDatalist('gerentesBtmList', catalogos.gerentesBtm || []);
-    poblarDatalist('profesionalesBtmList', catalogos.profesionalesBtm || []);
-    poblarDatalist('profesionalesContablesList', catalogos.profesionalesContables || []);
-  }
-
-  function poblarDatalist(id, emails) {
-    var list = document.getElementById(id);
-    if (!list) return;
-    list.innerHTML = '';
-    emails.forEach(function(email) {
-      var option = document.createElement('option');
-      option.value = email;
-      list.appendChild(option);
+  function leerPreliquidacionesInicialesNuevoNegocio() {
+    var paquetes = [];
+    Array.prototype.forEach.call(document.querySelectorAll('#newBusinessCommissionPreview .new-business-preview-card'), function(card) {
+      var valores = leerValoresPreliq(card);
+      var tieneValores = Object.keys(valores).some(function(key) {
+        return key !== 'iva' && Number(valores[key]) > 0;
+      });
+      if (!tieneValores) return;
+      paquetes.push({
+        tipoComision: card.dataset.tipoComision,
+        valores: valores
+      });
     });
+    return paquetes;
   }
 
   function poblarCatalogosAsignacion(catalogos) {
@@ -1148,9 +1149,10 @@
         payload[field.name] = field.value;
       }
     });
+    payload.preliquidacionesIniciales = leerPreliquidacionesInicialesNuevoNegocio();
     var boton = document.getElementById('btnCrearNegocio');
     if (boton) boton.disabled = true;
-    mostrarProceso('Creando negocio y asignaciones...');
+    mostrarProceso(payload.preliquidacionesIniciales.length ? 'Creando negocio y guardando preliquidación inicial...' : 'Creando negocio y asignaciones...');
     google.script.run
       .withSuccessHandler(function(respuesta) {
         ocultarProceso();
