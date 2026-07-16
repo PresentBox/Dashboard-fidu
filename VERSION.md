@@ -2,10 +2,14 @@
 
 ## Versión actual
 
-- **Versión:** 0.2.7
+- **Versión:** 0.2.8
 - **Fecha:** 2026-07-16
-- **Entrega:** Mejora UX/UI de `Crear negocio` agrupando tipos de comisión, descripción y preview de preliquidación inicial en una sección final dedicada para no desajustar las cajas principales del formulario.
+- **Entrega:** Unifica el look and feel de correos operativos con la plantilla visual de alertas diarias antes del vencimiento.
 
+## 0.2.8
+
+- Unifica correos de nuevo negocio asignado, preliquidación para facturación y cambios de estado con la plantilla HTML tipo alerta diaria antes del vencimiento.
+- Mantiene cuerpos de texto plano como respaldo para clientes de correo sin HTML.
 
 ## 0.2.7
 

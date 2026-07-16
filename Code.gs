@@ -3,7 +3,7 @@
 // ============================================================================
 const CONFIG = {
   APP_TITLE: 'Fidu Gestión - CRM Lotes',
-  APP_VERSION: '0.2.7',
+  APP_VERSION: '0.2.8',
   SHEETS: {
     CONTROL: 'control',
     BTM: 'CONT/BTM',
@@ -256,6 +256,82 @@ function addUniqueEmail_(list, value) {
   if (email && list.indexOf(email) === -1) list.push(email);
 }
 
+function buildStandardAlertShellHtml_(title, subtitle, contentHtml) {
+  return '<div style="background:#f3f4f6;padding:28px;font-family:Segoe UI,Arial,sans-serif;color:#020b5f;">' +
+    '<div style="max-width:760px;margin:0 auto;background:#ffffff;border-radius:22px;overflow:hidden;box-shadow:0 18px 45px rgba(4,17,90,0.08);">' +
+      '<div style="background:#001391;color:#fff;padding:28px 32px;">' +
+        '<div style="font-size:36px;font-weight:900;margin-bottom:12px;">BBVA</div>' +
+        '<h1 style="margin:0;font-size:24px;line-height:1.25;">' + escapeHtml_(title) + '</h1>' +
+        '<p style="margin:10px 0 0;color:#d8ecff;">' + escapeHtml_(subtitle || 'CRM Fiduciaria BBVA · Sistema de alertas') + '</p>' +
+      '</div>' +
+      '<div style="padding:28px 32px;">' + contentHtml + '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function buildDashboardButtonHtml_(label) {
+  return '<div style="margin-top:26px;"><a href="' + CONFIG.DASHBOARD_URL + '" style="display:inline-block;background:#001391;color:#ffffff;text-decoration:none;border-radius:12px;padding:14px 22px;font-weight:800;">' + escapeHtml_(label || 'Ingresar al Dashboard') + '</a></div>';
+}
+
+function buildInfoBoxHtml_(text) {
+  return '<div style="background:#d8ecff;border-radius:16px;padding:16px 18px;margin:18px 0 22px;color:#020b5f;">' + text + '</div>';
+}
+
+function buildSimpleRowsTableHtml_(headers, rows) {
+  var headerHtml = headers.map(function(header) {
+    return '<th style="padding:12px;color:#5d668a;font-size:12px;text-transform:uppercase;text-align:left;">' + escapeHtml_(header) + '</th>';
+  }).join('');
+  var rowHtml = rows.map(function(row) {
+    return '<tr>' + row.map(function(cell, index) {
+      var color = index === 0 ? '#001391' : '#020b5f';
+      var weight = index === 0 ? 'font-weight:700;' : '';
+      return '<td style="padding:12px;border-bottom:1px solid #edf0f4;color:' + color + ';' + weight + '">' + escapeHtml_(cell) + '</td>';
+    }).join('') + '</tr>';
+  }).join('');
+  return '<table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #edf0f4;border-radius:14px;overflow:hidden;">' +
+    '<thead><tr style="background:#f7f8fa;">' + headerHtml + '</tr></thead><tbody>' + rowHtml + '</tbody></table>';
+}
+
+function buildAssignedBtmNewBusinessHtml_(creador, radicacion, nombre, tipos) {
+  var rows = [
+    ['Radicación', radicacion],
+    ['Nombre del negocio', nombre],
+    ['Tipos de comisión sugeridos', tipos],
+    ['Creado por', creador]
+  ];
+  return buildStandardAlertShellHtml_(
+    'Nuevo negocio asignado en Fidu Gestión',
+    'CRM Fiduciaria BBVA · Asignación BTM',
+    '<p style="font-size:17px;line-height:1.55;margin:0 0 18px;font-weight:800;">Hola,</p>' +
+    '<p style="font-size:16px;line-height:1.55;margin:0 0 14px;">Se creó un nuevo negocio en Fidu Gestión y quedaste asignado como BTM responsable.</p>' +
+    buildInfoBoxHtml_('<strong>Acción sugerida:</strong> Revisa el negocio, acepta la gestión operativa y genera la preliquidación inicial cuando corresponda.') +
+    buildSimpleRowsTableHtml_(['Dato', 'Detalle'], rows) +
+    buildDashboardButtonHtml_('Revisar negocio') +
+    '<p style="font-size:14px;line-height:1.55;margin:22px 0 0;color:#5d668a;">Gracias por tu gestión.</p>'
+  );
+}
+
+function buildBillingPreliquidationHtml_(usuario, nombreNegocio, radicacion, tipoComision, calculo) {
+  var rows = [
+    ['Radicación', radicacion],
+    ['Negocio', nombreNegocio],
+    ['Tipo de comisión', tipoComision],
+    ['Subtotal', '$' + calculo.subtotal.toLocaleString('es-CO')],
+    ['IVA', '$' + calculo.ivaValor.toLocaleString('es-CO')],
+    ['Total', '$' + calculo.total.toLocaleString('es-CO')]
+  ];
+  return buildStandardAlertShellHtml_(
+    'Preliquidación generada para facturación',
+    'CRM Fiduciaria BBVA · Preliquidación',
+    '<p style="font-size:17px;line-height:1.55;margin:0 0 18px;font-weight:800;">Hola equipo de Facturación,</p>' +
+    '<p style="font-size:16px;line-height:1.55;margin:0 0 14px;">El usuario BTM <strong>' + escapeHtml_(usuario) + '</strong> generó una preliquidación que requiere gestión de facturación.</p>' +
+    buildInfoBoxHtml_('<strong>Acción requerida:</strong> Ingresa al Dashboard para revisar y dejar en firme la factura FIDUSAP.') +
+    buildSimpleRowsTableHtml_(['Dato', 'Detalle'], rows) +
+    buildDashboardButtonHtml_('Gestionar facturación') +
+    '<p style="font-size:14px;line-height:1.55;margin:22px 0 0;color:#5d668a;">Gracias por tu gestión.</p>'
+  );
+}
+
 function notifyAssignedBtmNewBusiness_(gerente, profesionalBtm, creador, radicacion, nombre, tiposComision) {
   var destinatarios = [];
   addUniqueEmail_(destinatarios, gerente);
@@ -270,8 +346,14 @@ function notifyAssignedBtmNewBusiness_(gerente, profesionalBtm, creador, radicac
     'Tipos de comisión sugeridos: ' + tipos + '\n' +
     'Creado por: ' + creador + '\n\n' +
     'Ingresa al Dashboard para revisar, aceptar la gestión operativa y generar la preliquidación inicial cuando corresponda: ' + CONFIG.DASHBOARD_URL;
+  var html = buildAssignedBtmNewBusinessHtml_(creador, radicacion, nombre, tipos);
   destinatarios.forEach(function(email) {
-    MailApp.sendEmail(email, asunto, cuerpo);
+    MailApp.sendEmail({
+      to: email,
+      subject: asunto,
+      body: cuerpo,
+      htmlBody: html
+    });
   });
   return destinatarios.length;
 }
@@ -617,8 +699,15 @@ function sendGroupedNotifications_(ejecutor, gruposPorContador) {
     if (contadorDestino.indexOf('@') === -1 || contadorDestino === CONFIG.SIN_ASIGNAR_EMAIL) return;
 
     var asunto = '⚠️ Resumen de Cambios Operativos Lote BTM - Solicitud de Facturación';
-    var cuerpo = buildNotificationBody_(ejecutor, gruposPorContador[contadorDestino]);
-    MailApp.sendEmail(contadorDestino, asunto, cuerpo);
+    var items = gruposPorContador[contadorDestino];
+    var cuerpo = buildNotificationBody_(ejecutor, items);
+    var html = buildNotificationHtml_(ejecutor, items);
+    MailApp.sendEmail({
+      to: contadorDestino,
+      subject: asunto,
+      body: cuerpo,
+      htmlBody: html
+    });
     conteoCorreosSent++;
   });
 
@@ -1153,8 +1242,14 @@ function notifyBillingPreliquidation_(book, usuario, nombreNegocio, radicacion, 
     'IVA: $' + calculo.ivaValor.toLocaleString('es-CO') + '\n' +
     'Total: $' + calculo.total.toLocaleString('es-CO') + '\n\n' +
     'Ingresa al Dashboard para dejar en firme la factura FIDUSAP: ' + CONFIG.DASHBOARD_URL;
+  var html = buildBillingPreliquidationHtml_(usuario, nombreNegocio, radicacion, tipoComision, calculo);
   emails.forEach(function(email) {
-    MailApp.sendEmail(email, subject, body);
+    MailApp.sendEmail({
+      to: email,
+      subject: subject,
+      body: body,
+      htmlBody: html
+    });
   });
   return emails.length;
 }
@@ -1269,40 +1364,19 @@ function sendBillingTeamStatusNotifications_(ejecutor, cambios, asignaciones, de
 
 function buildNotificationHtml_(ejecutor, items) {
   var rows = items.map(function(item) {
-    return '<tr>' +
-      '<td style="padding:14px 16px;border-bottom:1px solid #edf0f4;font-weight:700;color:#001391;">' + escapeHtml_(item.radicacion) + '</td>' +
-      '<td style="padding:14px 16px;border-bottom:1px solid #edf0f4;color:#020b5f;">' + escapeHtml_(item.nombre) + '</td>' +
-      '<td style="padding:14px 16px;border-bottom:1px solid #edf0f4;"><span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#e7f4ff;color:#001391;font-weight:700;">' + escapeHtml_(item.estado) + '</span></td>' +
-    '</tr>';
-  }).join('');
+    return [item.radicacion, item.nombre, item.estado];
+  });
 
-  return '<div style="margin:0;padding:0;background:#f3f4f6;font-family:Segoe UI,Arial,sans-serif;color:#020b5f;">' +
-    '<div style="max-width:760px;margin:0 auto;padding:28px;">' +
-      '<div style="background:#ffffff;border-radius:22px;overflow:hidden;box-shadow:0 18px 45px rgba(4,17,90,0.08);">' +
-        '<div style="background:#001391;color:#ffffff;padding:28px 32px;">' +
-          '<div style="font-size:42px;line-height:1;font-weight:800;margin-bottom:18px;">Λ</div>' +
-          '<h1 style="margin:0;font-size:24px;line-height:1.25;">Cambios de estado listos para validación de Facturación</h1>' +
-          '<p style="margin:12px 0 0;color:#d8ecff;font-size:14px;">Fidu Gestión · Sistema de alertas por lotes BBVA</p>' +
-        '</div>' +
-        '<div style="padding:28px 32px;">' +
-          '<p style="margin:0 0 16px;font-size:15px;line-height:1.55;">Hola equipo de <strong>Facturación</strong>,</p>' +
-          '<p style="margin:0 0 22px;font-size:15px;line-height:1.55;">El usuario BTM <strong>' + escapeHtml_(ejecutor) + '</strong> guardó un lote con modificaciones de estado desde el CRM Corporativo. Por favor valida las comisiones antes de continuar con la facturación.</p>' +
-          '<div style="background:#d8ecff;border-radius:16px;padding:16px 18px;margin-bottom:22px;color:#020b5f;">' +
-            '<strong>Resumen:</strong> ' + items.length + ' negocio(s) requieren revisión de Facturación.' +
-          '</div>' +
-          '<table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;background:#ffffff;border:1px solid #edf0f4;border-radius:14px;overflow:hidden;">' +
-            '<thead><tr style="background:#f7f8fa;text-align:left;">' +
-              '<th style="padding:12px 16px;color:#5d668a;font-size:12px;text-transform:uppercase;">Radicación</th>' +
-              '<th style="padding:12px 16px;color:#5d668a;font-size:12px;text-transform:uppercase;">Negocio</th>' +
-              '<th style="padding:12px 16px;color:#5d668a;font-size:12px;text-transform:uppercase;">Nuevo estado</th>' +
-            '</tr></thead>' +
-            '<tbody>' + rows + '</tbody>' +
-          '</table>' +
-          '<p style="margin:24px 0 0;font-size:14px;line-height:1.55;color:#5d668a;">Ingresa al portal para revisar los negocios activos, validar comisiones y marcar el periodo como facturado cuando corresponda.</p>' +
-        '</div>' +
-      '</div>' +
-    '</div>' +
-  '</div>';
+  return buildStandardAlertShellHtml_(
+    'Cambios de estado listos para validación de Facturación',
+    'CRM Fiduciaria BBVA · Sistema de alertas por lotes',
+    '<p style="font-size:17px;line-height:1.55;margin:0 0 18px;font-weight:800;">Hola equipo de Facturación,</p>' +
+    '<p style="font-size:16px;line-height:1.55;margin:0 0 14px;">El usuario BTM <strong>' + escapeHtml_(ejecutor) + '</strong> guardó un lote con modificaciones de estado desde el CRM Corporativo. Por favor valida las comisiones antes de continuar con la facturación.</p>' +
+    buildInfoBoxHtml_('<strong>Resumen:</strong> ' + items.length + ' negocio(s) requieren revisión de Facturación.') +
+    buildSimpleRowsTableHtml_(['Radicación', 'Negocio', 'Nuevo estado'], rows) +
+    buildDashboardButtonHtml_('Revisar negocios') +
+    '<p style="font-size:14px;line-height:1.55;margin:22px 0 0;color:#5d668a;">Gracias por tu gestión.</p>'
+  );
 }
 
 function escapeHtml_(value) {

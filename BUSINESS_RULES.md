@@ -208,7 +208,7 @@
 - **Descripción:** Al crear un negocio, `Tipo general` debe ser `Fija` o `Variable`, pueden registrarse varios tipos de comisión sugeridos, se muestran campos/preview de cálculo en una sección final dedicada, se guardan preliquidaciones iniciales cuando el usuario captura valores y se notifica a gerente/profesional BTM asignados.
 - **Archivo y función:** `Code.gs`, `registrarNuevoNegocio()`, `notifyAssignedBtmNewBusiness_()`; `Index.html`, formulario `newBusinessForm`; `JS.html`, `crearNuevoNegocio()`.
 - **Datos:** `control`, `CONT/BTM`, `Tabla de comisiones`.
-- **Resultado esperado:** El negocio queda creado con asignación BTM/contable, Código Negocio FIDUSAP en `CONT/BTM` columna B, Nombre del Negocio en columna D, las preliquidaciones iniciales con valores quedan en `preliquidaciones` y los BTM asignados reciben correo de aviso.
+- **Resultado esperado:** El negocio queda creado con asignación BTM/contable, Código Negocio FIDUSAP en `CONT/BTM` columna B, Nombre del Negocio en columna D, las preliquidaciones iniciales con valores quedan en `preliquidaciones` y los BTM asignados reciben correo de aviso con plantilla visual estándar.
 - **Riesgo si se modifica:** Alto; afecta entrada de negocios y notificación operativa.
 
 ## BR-22 — Reasignación temporal por BTM actual
