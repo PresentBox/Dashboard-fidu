@@ -43,7 +43,7 @@ Columnas creadas:
 | I | factura_fidusap |
 | J | cufe |
 
-El periodo operativo se calcula con el reloj actual del script en formato `yyyy-MM`, pero conserva el mes anterior hasta el día 2 calendario a las 11:59 p. m. del mes siguiente. El día 3 inicia el nuevo periodo. La factura se registra por negocio completo y consolida todas sus líneas de preliquidación. Factura FIDUSAP, CUFE, fecha y valor son obligatorios; el valor debe coincidir con el total preliquidado. Puede registrarse manualmente o mediante un CSV con los encabezados indicados en la interfaz. Cuando una radicación queda registrada para el periodo operativo, desaparece de la vista de pendientes de Facturación.
+El periodo operativo se calcula con el reloj actual del script en formato `yyyy-MM`, pero conserva el mes anterior hasta el día 2 calendario a las 11:59 p. m. del mes siguiente. El día 3 inicia el nuevo periodo. La factura se registra por negocio completo y consolida todas sus líneas de preliquidación. Factura FIDUSAP, CUFE, fecha y valor son obligatorios; el valor debe coincidir con el total preliquidado. Puede registrarse manualmente o mediante un CSV con los encabezados indicados en la interfaz. Cuando una radicación queda registrada para el periodo operativo, desaparece de la vista de pendientes de Facturación. Para evitar falsos positivos de datos históricos, una fila solo se reconoce como facturada cuando tiene estado `FACTURADO`, fecha de facturación, valor mayor que cero, factura FIDUSAP y CUFE.
 
 ## Mapeo inicial para pre liquidación
 

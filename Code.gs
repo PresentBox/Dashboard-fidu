@@ -3,7 +3,7 @@
 // ============================================================================
 const CONFIG = {
   APP_TITLE: 'Fidu Gestión - CRM Lotes',
-  APP_VERSION: '0.2.11',
+  APP_VERSION: '0.2.12',
   SHEETS: {
     CONTROL: 'control',
     BTM: 'CONT/BTM',
@@ -815,7 +815,7 @@ function buildCurrentPeriodBillingMap_(book) {
   for (var row = 1; row < values.length; row++) {
     var period = normalizePeriodValue_(values[row][1]);
     var radicacion = normalizeKey_(values[row][2]);
-    if (period === currentPeriod && radicacion) {
+    if (period === currentPeriod && radicacion && isCompleteBillingRecord_(values[row])) {
       map[radicacion] = {
         fechaRegistro: formatSheetDate_(values[row][0]),
         periodo: period,
@@ -831,6 +831,14 @@ function buildCurrentPeriodBillingMap_(book) {
     }
   }
   return map;
+}
+
+function isCompleteBillingRecord_(row) {
+  return normalizaTexto_(row[4]) === 'facturado' &&
+    Boolean(toCleanString_(row[6])) &&
+    parseNumber_(row[7]) > 0 &&
+    Boolean(toCleanString_(row[8])) &&
+    Boolean(toCleanString_(row[9]));
 }
 
 

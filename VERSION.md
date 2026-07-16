@@ -2,9 +2,14 @@
 
 ## Versión actual
 
-- **Versión:** 0.2.11
+- **Versión:** 0.2.12
 - **Fecha:** 2026-07-16
-- **Entrega:** Facturación consolidada por negocio con factura FIDUSAP, CUFE, fecha, validación de valor e importación CSV.
+- **Entrega:** Corrige falsos positivos de negocios facturados causados por filas históricas o incompletas de `facturacion`.
+
+## 0.2.12
+
+- Solo reconoce una radicación como facturada si la fila tiene estado `FACTURADO`, fecha, valor mayor que cero, factura FIDUSAP y CUFE.
+- Las filas creadas por el flujo legado de cinco columnas permanecen como histórico, pero ya no bloquean la facturación consolidada.
 
 ## 0.2.11
 

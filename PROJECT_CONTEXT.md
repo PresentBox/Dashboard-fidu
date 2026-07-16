@@ -355,3 +355,5 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Desde la versión 0.2.10, los tipos con `cantidad` en modo salarios calculan exclusivamente cantidad × SMMLV y muestran el SMMLV como campo bloqueado visible.
 
 - Desde la versión 0.2.11, Facturación registra el negocio completo del periodo, exige factura FIDUSAP, CUFE y fecha, valida el valor consolidado y permite importación CSV protegida con lock.
+
+- Desde la versión 0.2.12, filas históricas o incompletas de `facturacion` no bloquean el registro: solo cuenta como facturado un registro con estado, fecha, valor, factura FIDUSAP y CUFE completos.

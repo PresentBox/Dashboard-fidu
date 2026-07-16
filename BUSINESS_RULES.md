@@ -48,7 +48,7 @@
 - **Archivo y función:** `JS.html`, `debeMostrarContrato()`, `tienePreliquidacionesPorFacturar()`; `Code.gs`, `buildCrmResponse_()`.
 - **Datos:** Hojas `preliquidaciones` y `facturacion`, periodo operativo actual.
 - **Resultado esperado:** Facturación ve el desglose por tipo y un único formulario consolidado con el total del negocio.
-- **Casos especiales:** Un negocio ya registrado en `facturacion` para el periodo deja de aparecer como pendiente.
+- **Casos especiales:** Solo bloquea un registro completo con estado `FACTURADO`, fecha, valor mayor que cero, factura FIDUSAP y CUFE. Filas legadas o incompletas no se consideran facturadas.
 - **Validaciones relacionadas:** `registrarFacturacionNegocio()` valida perfil, periodo y existencia de preliquidaciones.
 - **Riesgo si se modifica:** Alto; puede facturar registros incorrectos.
 
