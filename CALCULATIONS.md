@@ -9,7 +9,7 @@
   - Obtener día del mes según `Session.getScriptTimeZone()`.
   - Si `día <= CONFIG.PERIOD_CUTOFF_DAY` (2), usar mes anterior.
   - Si `día >= 3`, usar mes actual.
-  - Formato: `yyyy-MM`.
+  - Formato: `yyyy-MM`; al leer hojas históricas se normalizan periodos guardados como texto o como fecha interpretada por Google Sheets.
 - **Entradas:** Fecha actual del script.
 - **Salida:** Periodo operativo string.
 - **Redondeo:** No aplica.
@@ -69,24 +69,24 @@
 - **Redondeo:** No aplica.
 - **Vacíos:** Si no hay texto relevante, `cantidad`.
 - **Casos límite:** La inferencia depende del texto exacto.
-- **Relación frontend/backend:** Backend envía `modo`; frontend lo usa para preview.
+- **Relación frontend/backend:** Backend envía `modo`; frontend lo usa para preview. En modo porcentaje, el valor de entrada conserva el número leído/escrito y la división entre 100 ocurre en la normalización porcentual.
 
 ## 6. Normalización de porcentaje
 
 - **Archivos y funciones:** `Code.gs`, `normalizeRate_()`; `JS.html`, `normalizarPorcentaje()`.
 - **Fórmula:**
   - Si valor vacío o 0 → 0.
-  - Si valor `>= 1` → valor / 100.
-  - Si valor `< 1` → valor tal cual.
+  - Todo valor no cero se interpreta como porcentaje escrito por el usuario y se divide entre 100.
 - **Entradas:** Valor de campo en modo porcentaje.
 - **Salida:** Tasa decimal.
 - **Redondeo:** No aplica.
 - **Vacíos:** Retorna 0.
 - **Ejemplos comprobables:**
-  - `1` → `0.01`.
-  - `3` → `0.03`.
-  - `0.03` → `0.03`.
-- **Casos límite:** `0.65` en campo porcentual se interpreta como 65%, no 0.65%, porque es menor a 1 y queda tal cual.
+  - `1` → `0.01` (1%).
+  - `3` → `0.03` (3%).
+  - `0.3` → `0.003` (0.3%).
+  - `0.05` → `0.0005` (0.05%).
+- **Casos límite:** `0.65` en campo porcentual se interpreta como 0.65% (`0.0065`), mientras que en modo salarios sigue siendo 0.65 × SMMLV.
 - **Relación frontend/backend:** Ambos implementan la misma regla.
 
 ## 7. Cálculo de preliquidación — backend
@@ -94,12 +94,13 @@
 - **Archivo y función:** `Code.gs`, `calcularPreliquidacion_(tipo, valores)`.
 - **Entradas:** Tipo de comisión, campos habilitados, `saldoUvr`, `valorUvr`, `cantidad`, `iva`, `smmlv`.
 - **Fórmula de subtotal según campos habilitados:**
-  1. Si `saldoUvr` y `valorUvr` habilitados: `subtotal = saldoUvr × valorUvr`.
-  2. Si `saldoUvr` y `cantidad` habilitados: `subtotal = saldoUvr × normalizeRate_(cantidad)`.
-  3. Si `valorUvr` y `cantidad` habilitados: `subtotal = valorUvr × (cantidad normalizada si modo porcentaje, o cantidad/1 si no)`.
-  4. Si solo `valorUvr` habilitado: `subtotal = valorUvr`.
-  5. Si solo `cantidad` habilitada: `subtotal = cantidad × smmlv`.
-  6. Si solo `saldoUvr` habilitado: `subtotal = saldoUvr`.
+  1. Si `cantidad` está habilitada en modo `salarios`: `subtotal = cantidad × smmlv`, aunque existan otros campos habilitados en la fila.
+  2. Si `saldoUvr` y `valorUvr` habilitados: `subtotal = saldoUvr × valorUvr`.
+  3. Si `saldoUvr` y `cantidad` habilitados: `subtotal = saldoUvr × normalizeRate_(cantidad)`.
+  4. Si `valorUvr` y `cantidad` habilitados: `subtotal = valorUvr × (cantidad normalizada si modo porcentaje, o cantidad/1 si no)`.
+  5. Si solo `valorUvr` habilitado: `subtotal = valorUvr`.
+  6. Si solo `cantidad` habilitada: `subtotal = cantidad × smmlv`.
+  7. Si solo `saldoUvr` habilitado: `subtotal = saldoUvr`.
 - **IVA:**
   - `ivaRate = parseNumber_(valores.iva)`.
   - Si no hay IVA, usa `0.19`.
@@ -111,8 +112,8 @@
 - **Ejemplos comprobables:**
   - Valor base 52.500.000 y cantidad 3 en modo porcentaje: subtotal 1.575.000; IVA 299.250; total 1.874.250.
   - SMMLV 1.750.905 y cantidad 0,65 en modo salarios: subtotal 1.138.088; IVA 216.237; total 1.354.325, con redondeo Math.round.
-- **Casos límite:** Si ningún campo relevante está habilitado, subtotal queda 0.
-- **Relación frontend/backend:** Frontend muestra preview, backend recalcula al guardar.
+- **Casos límite:** Si `cantidad` está en modo `salarios`, el cálculo ignora saldos/valor UVR y solo usa cantidad × SMMLV; si ningún campo relevante está habilitado, subtotal queda 0.
+- **Relación frontend/backend:** Frontend muestra preview, backend recalcula al guardar. Para modo `salarios`, el frontend muestra el SMMLV parametrizado como campo bloqueado visible.
 
 ## 8. Cálculo de preliquidación — frontend
 
@@ -189,7 +190,10 @@
 - **Archivo y función:** `Code.gs`, `parseNumber_(value)`.
 - **Fórmula:**
   - Si ya es number, retorna el valor.
-  - Convierte string quitando `$`, puntos, cambiando coma por punto y quitando `%`.
+  - Convierte string quitando `$`, espacios y `%`.
+  - Si hay coma y punto, asume formato colombiano (`1.234,56`) y quita puntos de miles.
+  - Si solo hay coma, la usa como separador decimal.
+  - Si solo hay punto, conserva decimales como `0.015`; si el texto usa puntos de miles claros como `1.234.567` o `100.000`, los normaliza a entero.
   - `Number(text) || 0`.
 - **Entradas:** Número o string.
 - **Resultado:** Número.
