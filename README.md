@@ -21,7 +21,7 @@ Crea una hoja llamada `usuarios` para perfiles adicionales que deben ver todos l
 Notas:
 
 - El perfil `Facturación` puede escribirse con o sin tilde; el sistema lo normaliza.
-- El perfil `Súper Admin` también puede administrarse en esta hoja; el código conserva una lista bootstrap mínima en `Code.gs` solo como respaldo de emergencia si la hoja aún no existe o queda mal configurada.
+- El perfil `Súper Admin` se administra desde esta hoja; el código no conserva correos bootstrap de Súper Admin.
 - Usa `NO`, `INACTIVO` o `FALSE` en la columna C para desactivar un usuario.
 
 ## Hoja `facturacion`
