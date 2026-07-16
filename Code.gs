@@ -3,6 +3,7 @@
 // ============================================================================
 const CONFIG = {
   APP_TITLE: 'Fidu Gestión - CRM Lotes',
+  APP_VERSION: '0.2.2',
   SHEETS: {
     CONTROL: 'control',
     BTM: 'CONT/BTM',
@@ -13,12 +14,6 @@ const CONFIG = {
     TABLA_COMISIONES: 'Tabla de comisiones',
     PRELIQUIDACIONES: 'preliquidaciones'
   },
-  // Fallback de emergencia para no perder acceso si la hoja `usuarios` aún no existe.
-  BOOTSTRAP_SUPER_ADMINS: [
-    'davidorlando.diaz@bbva.com',
-    'edith.herrera@bbva.com',
-    'sebastian.cuervo.rojas@bbva.com'
-  ],
   CONTROL_COLS: {
     RADICACION: 0,
     CODIGO_FIDUSAP: 1,
@@ -46,7 +41,7 @@ const CONFIG = {
   PERIOD_CUTOFF_DAY: 2,
   DASHBOARD_URL: 'https://script.google.com/a/macros/bbva.com/s/AKfycbyFsbZtNVXLaKN6Rba2uTPj9k4-1iBiqzlkleUwLQs1ytgS2nETaz_teUz9yQllh6Ey_A/exec',
   // Cambia este correo para ejecutar pruebas desde el menú de Apps Script sin editar parámetros de funciones.
-  TEST_EMAIL: 'davidorlando.diaz@bbva.com'
+  TEST_EMAIL: 'pruebas@bbva.com'
 };
 
 const ROLES = {
@@ -140,12 +135,12 @@ function registrarNuevoNegocio(payload) {
   controlRow[CONFIG.CONTROL_COLS.FECHA_VIGENCIA] = parseOptionalDate_(payload.fechaVigencia);
   controlRow[CONFIG.CONTROL_COLS.NOMBRE_NEGOCIO] = nombre;
   controlRow[CONFIG.CONTROL_COLS.ESTADO] = toCleanString_(payload.estado) || 'Activo';
-  var tipoComisionSugerida = toCleanString_(payload.tipoComisionSugerida);
+  var tiposComisionSugeridos = normalizeCommissionTypesPayload_(payload.tipoComisionSugerida || payload.tiposComisionSugerida);
   var descripcionComisiones = toCleanString_(payload.descripcionComisiones);
-  controlRow[CONFIG.CONTROL_COLS.COMISION] = tipoComisionSugerida
-    ? ('Tipo de comisión sugerido: ' + tipoComisionSugerida + (descripcionComisiones ? '. ' + descripcionComisiones : ''))
+  controlRow[CONFIG.CONTROL_COLS.COMISION] = tiposComisionSugeridos.length
+    ? ('Tipos de comisión sugeridos: ' + tiposComisionSugeridos.join(', ') + (descripcionComisiones ? '. ' + descripcionComisiones : ''))
     : descripcionComisiones;
-  controlRow[CONFIG.CONTROL_COLS.TIPO] = toCleanString_(payload.tipoGeneral) || 'No Definido';
+  controlRow[CONFIG.CONTROL_COLS.TIPO] = normalizeGeneralType_(payload.tipoGeneral);
   sheets.control.appendRow(controlRow);
 
   var btmRow = new Array(24).fill('');
@@ -156,7 +151,10 @@ function registrarNuevoNegocio(payload) {
   btmRow[CONFIG.BTM_COLS.PROFESIONAL_BTM] = normalizeEmail_(payload.profesionalBtm) || email;
   sheets.btm.appendRow(btmRow);
 
-  return '✅ Negocio ' + radicacion + ' creado para preliquidación.';
+  notifyAssignedBtmNewBusiness_(btmRow[CONFIG.BTM_COLS.GERENTE], btmRow[CONFIG.BTM_COLS.PROFESIONAL_BTM], email, radicacion, nombre, tiposComisionSugeridos);
+  var resumenPreliquidacionInicial = registrarPreliquidacionesInicialesNuevoNegocio_(book, email, radicacion, nombre, controlRow, payload.preliquidacionesIniciales);
+
+  return '✅ Negocio ' + radicacion + ' creado y notificado al BTM asignado.' + (resumenPreliquidacionInicial.cantidad ? ' Se guardaron ' + resumenPreliquidacionInicial.cantidad + ' preliquidación(es) inicial(es) por $' + resumenPreliquidacionInicial.total.toLocaleString('es-CO') + '.' : ' No se guardaron preliquidaciones iniciales.');
 }
 
 /**
@@ -164,6 +162,117 @@ function registrarNuevoNegocio(payload) {
  * @param {Object} paqueteCambios Objeto { radicacion: nuevoEstado }.
  * @return {string}
  */
+
+
+function registrarPreliquidacionesInicialesNuevoNegocio_(book, usuario, radicacion, nombreNegocio, controlRow, paquetes) {
+  var resumen = { cantidad: 0, total: 0 };
+  if (!Array.isArray(paquetes) || paquetes.length === 0) return resumen;
+
+  var tipos = getCommissionTypes_(book);
+  var sheet = getOrCreatePreliquidationSheet_(book);
+  var period = getCurrentBillingPeriod_();
+  var now = new Date();
+  var rows = [];
+  var notificaciones = [];
+
+  paquetes.forEach(function(paquete) {
+    var tipo = findCommissionType_(tipos, paquete.tipoComision);
+    if (!tipo) throw new Error('Selecciona un tipo de comisión válido para la preliquidación inicial: ' + toCleanString_(paquete.tipoComision));
+    var valores = paquete.valores || {};
+    var calculo = calcularPreliquidacion_(tipo, valores);
+    if (!calculo.total || calculo.total <= 0) return;
+    var id = Utilities.getUuid();
+    rows.push([
+      now,
+      period,
+      id,
+      radicacion,
+      toCleanString_(controlRow[CONFIG.CONTROL_COLS.CODIGO_FIDUSAP]) || '',
+      nombreNegocio,
+      tipo.tipo,
+      JSON.stringify(valores),
+      calculo.subtotal,
+      calculo.ivaValor,
+      calculo.total,
+      usuario,
+      'PRELIQUIDADA',
+      '',
+      '',
+      toCleanString_(controlRow[CONFIG.CONTROL_COLS.COMISION]) || ''
+    ]);
+    resumen.cantidad++;
+    resumen.total += calculo.total;
+    notificaciones.push({ tipo: tipo.tipo, calculo: calculo });
+  });
+
+  if (rows.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    notificaciones.forEach(function(item) {
+      notifyBillingPreliquidation_(book, usuario, nombreNegocio, radicacion, item.tipo, item.calculo);
+    });
+  }
+
+  return resumen;
+}
+
+function normalizeGeneralType_(value) {
+  var normalized = normalizaTexto_(value);
+  if (normalized === 'fija' || normalized === 'fijo') return 'Fija';
+  if (normalized === 'variable') return 'Variable';
+  throw new Error('Tipo general inválido. Selecciona Fija o Variable.');
+}
+
+function normalizeCommissionTypesPayload_(value) {
+  if (Array.isArray(value)) {
+    return value.map(toCleanString_).filter(function(item, index, array) {
+      return item && array.indexOf(item) === index;
+    });
+  }
+  var clean = toCleanString_(value);
+  if (!clean) return [];
+  return clean.split(',').map(toCleanString_).filter(function(item, index, array) {
+    return item && array.indexOf(item) === index;
+  });
+}
+
+function buildAssignmentCatalogs_(asignaciones) {
+  var catalogs = { gerentesBtm: [], profesionalesBtm: [], profesionalesContables: [] };
+  Object.keys(asignaciones || {}).forEach(function(key) {
+    addUniqueEmail_(catalogs.gerentesBtm, asignaciones[key].gerente);
+    addUniqueEmail_(catalogs.profesionalesBtm, asignaciones[key].profesionalBtm);
+    addUniqueEmail_(catalogs.profesionalesContables, asignaciones[key].profesionalContable);
+  });
+  catalogs.gerentesBtm.sort();
+  catalogs.profesionalesBtm.sort();
+  catalogs.profesionalesContables.sort();
+  return catalogs;
+}
+
+function addUniqueEmail_(list, value) {
+  var email = normalizeEmail_(value);
+  if (email && list.indexOf(email) === -1) list.push(email);
+}
+
+function notifyAssignedBtmNewBusiness_(gerente, profesionalBtm, creador, radicacion, nombre, tiposComision) {
+  var destinatarios = [];
+  addUniqueEmail_(destinatarios, gerente);
+  addUniqueEmail_(destinatarios, profesionalBtm);
+  if (!destinatarios.length) return 0;
+  var asunto = 'Nuevo negocio asignado en Fidu Gestión - ' + radicacion;
+  var tipos = tiposComision && tiposComision.length ? tiposComision.join(', ') : 'Sin tipo sugerido';
+  var cuerpo = 'Hola,\n\n' +
+    'Se creó un nuevo negocio en Fidu Gestión y quedaste asignado como BTM responsable.\n\n' +
+    'Radicación: ' + radicacion + '\n' +
+    'Nombre del negocio: ' + nombre + '\n' +
+    'Tipos de comisión sugeridos: ' + tipos + '\n' +
+    'Creado por: ' + creador + '\n\n' +
+    'Ingresa al Dashboard para revisar, aceptar la gestión operativa y generar la preliquidación inicial cuando corresponda: ' + CONFIG.DASHBOARD_URL;
+  destinatarios.forEach(function(email) {
+    MailApp.sendEmail(email, asunto, cuerpo);
+  });
+  return destinatarios.length;
+}
+
 function guardarAjustesEnLote(paqueteCambios) {
   var cambiosNormalizados = normalizeChangePackage_(paqueteCambios);
   var radicaciones = Object.keys(cambiosNormalizados);
@@ -192,6 +301,50 @@ function guardarAjustesEnLote(paqueteCambios) {
   return '💾 ¡Éxito! Se actualizaron ' + rowsActualizadas + ' estados en control. Se enviaron ' + conteoCorreosSent + ' correos consolidados al equipo de Facturación.';
 }
 
+
+/**
+ * Permite al BTM actualmente asignado reasignar temporalmente el gerente/profesional BTM.
+ * @param {Object} payload Datos de reasignación.
+ * @return {string}
+ */
+function reasignarBtmNegocio(payload) {
+  payload = payload || {};
+  var radicacion = toCleanString_(payload.radicacion);
+  var nuevoGerente = normalizeEmail_(payload.gerenteBtm);
+  var nuevoProfesional = normalizeEmail_(payload.profesionalBtm);
+  if (!radicacion) throw new Error('Radicación inválida para reasignar BTM.');
+  if (!nuevoGerente && !nuevoProfesional) throw new Error('Selecciona al menos un Gerente BTM o Profesional BTM para reasignar.');
+
+  var book = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = getRequiredSheets_(book);
+  var email = getCurrentUserEmail_();
+  var datosBTM = sheets.btm.getDataRange().getValues();
+  var key = normalizeKey_(radicacion);
+  var targetRow = -1;
+  var asignacionActual = null;
+
+  for (var row = 1; row < datosBTM.length; row++) {
+    if (normalizeKey_(datosBTM[row][CONFIG.BTM_COLS.RADICACION]) === key) {
+      targetRow = row + 1;
+      asignacionActual = {
+        gerente: normalizeEmail_(datosBTM[row][CONFIG.BTM_COLS.GERENTE]),
+        profesionalBtm: normalizeEmail_(datosBTM[row][CONFIG.BTM_COLS.PROFESIONAL_BTM])
+      };
+      break;
+    }
+  }
+
+  if (targetRow === -1) throw new Error('No se encontró la radicación ' + radicacion + ' en CONT/BTM.');
+  if (email !== asignacionActual.gerente && email !== asignacionActual.profesionalBtm) {
+    throw new Error('Solo el BTM actualmente asignado al negocio puede reasignarlo temporalmente.');
+  }
+
+  if (nuevoGerente) sheets.btm.getRange(targetRow, CONFIG.BTM_COLS.GERENTE + 1).setValue(nuevoGerente);
+  if (nuevoProfesional) sheets.btm.getRange(targetRow, CONFIG.BTM_COLS.PROFESIONAL_BTM + 1).setValue(nuevoProfesional);
+
+  return '✅ Reasignación BTM guardada para la radicación ' + radicacion + '.';
+}
+
 /**
  * Registra una liquidación variable. Punto preparado para conectar con una hoja/auditoría.
  * @param {string} radicacion
@@ -215,7 +368,7 @@ function getCurrentUserEmail_() {
 
 function isSuperAdmin_(email, perfilesAdicionales) {
   var perfiles = perfilesAdicionales || [];
-  return perfiles.indexOf(ROLES.SUPER_ADMIN) !== -1 || CONFIG.BOOTSTRAP_SUPER_ADMINS.indexOf(email) !== -1;
+  return perfiles.indexOf(ROLES.SUPER_ADMIN) !== -1;
 }
 
 function getRequiredSheets_(book) {
@@ -241,7 +394,8 @@ function buildEmptyResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfile
     listaContratos: [],
     tiposComision: [],
     metricas: { totalActivos: 0, totalVariables: 0, discrepancias: 0, pendientesFacturacionPeriodo: 0, totalInactivos: 0, totalEnLiquidacion: 0, totalFijos: 0, totalContratosComision: 0 },
-    periodoActual: getCurrentBillingPeriod_()
+    periodoActual: getCurrentBillingPeriod_(),
+    version: CONFIG.APP_VERSION
   };
 }
 
@@ -296,6 +450,9 @@ function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesA
     var estadoRealSFC = mapaEstadosSFC[radicacionKey] || 'No Encontrado';
     var estadoValidacion = getValidationStatus_(estadoControl, estadoRealSFC, metricas);
     var esquema = interpretarTextoComision(datosControl[row][CONFIG.CONTROL_COLS.COMISION]);
+    var tipoGeneralNormalizado = normalizaTexto_(datosControl[row][CONFIG.CONTROL_COLS.TIPO]);
+    if (tipoGeneralNormalizado === 'variable') esquema = 'Variable';
+    if (tipoGeneralNormalizado === 'fija' || tipoGeneralNormalizado === 'fijo') esquema = 'Fija';
 
     var estaActivo = estadoControl.toLowerCase() === 'activo';
     var facturadoPeriodoActual = Boolean(facturadosPeriodoActual[radicacionKey]);
@@ -357,8 +514,10 @@ function buildCrmResponse_(correoUsuario, esSuperAdmin, esFacturacion, perfilesA
     rolesDisponibles: buildRolesList_(esSuperAdmin, perfilesAdicionales, Array.from(rolesDetectados)),
     listaContratos: contratosProcesados,
     tiposComision: tiposComision || [],
+    catalogosAsignacion: buildAssignmentCatalogs_(mapaAsignacionesBTM),
     metricas: metricas,
-    periodoActual: getCurrentBillingPeriod_()
+    periodoActual: getCurrentBillingPeriod_(),
+    version: CONFIG.APP_VERSION
   };
 }
 
@@ -597,6 +756,9 @@ function registrarPreliquidacionContrato(payload) {
   var row = controlPorRadicacion[key];
   if (!row) throw new Error('No se encontró la radicación ' + radicacion + ' en control.');
 
+  var estadoNegocio = normalizaEstadoNegocio_(row[CONFIG.CONTROL_COLS.ESTADO]);
+  if (estadoNegocio !== 'activo') throw new Error('El negocio está ' + toCleanString_(row[CONFIG.CONTROL_COLS.ESTADO]) + ' y no permite preliquidar.');
+
   var asignacion = asignaciones[key] || buildEmptyAssignment_();
   var puedePreliquidar = esAdmin || email === asignacion.gerente || email === asignacion.profesionalBtm;
   if (!puedePreliquidar) throw new Error('Solo BTM, profesional BTM o Súper Admin pueden generar la preliquidación.');
@@ -722,6 +884,9 @@ function registrarCierreLiquidacionMensual(radicaciones) {
     if (!row) throw new Error('No se encontró la radicación ' + clean + ' en control.');
 
     var esquema = interpretarTextoComision(row[CONFIG.CONTROL_COLS.COMISION]);
+    var tipoGeneralNormalizado = normalizaTexto_(row[CONFIG.CONTROL_COLS.TIPO]);
+    if (tipoGeneralNormalizado === 'variable') esquema = 'Variable';
+    if (tipoGeneralNormalizado === 'fija' || tipoGeneralNormalizado === 'fijo') esquema = 'Fija';
     if (esquema !== 'Variable') throw new Error('La radicación ' + clean + ' no es de esquema variable.');
 
     var asignacion = asignaciones[key] || buildEmptyAssignment_();
@@ -938,7 +1103,19 @@ function normalizeRate_(value) {
 
 function parseNumber_(value) {
   if (typeof value === 'number') return value;
-  var text = toCleanString_(value).replace(/\$/g, '').replace(/\./g, '').replace(/,/g, '.').replace(/%/g, '');
+  var text = String(value || '').trim().replace(/[$\s%]/g, '');
+  if (!text) return 0;
+  var hasComma = text.indexOf(',') !== -1;
+  var hasDot = text.indexOf('.') !== -1;
+  if (hasComma && hasDot) {
+    text = text.replace(/\./g, '').replace(',', '.');
+  } else if (hasComma) {
+    text = text.replace(',', '.');
+  } else if (hasDot && text.indexOf('.') !== text.lastIndexOf('.')) {
+    text = text.replace(/\./g, '');
+  } else if (hasDot && text.charAt(0) !== '0' && /^\d{1,3}\.\d{3}$/.test(text)) {
+    text = text.replace(/\./g, '');
+  }
   return Number(text) || 0;
 }
 
@@ -1321,6 +1498,9 @@ function buildLiquidationReminderGroups_(datosControl, asignaciones, liquidacion
     if (preliquidacionesPeriodoActual && preliquidacionesPeriodoActual[radKey]) continue;
 
     var esquema = interpretarTextoComision(datosControl[row][CONFIG.CONTROL_COLS.COMISION]);
+    var tipoGeneralNormalizado = normalizaTexto_(datosControl[row][CONFIG.CONTROL_COLS.TIPO]);
+    if (tipoGeneralNormalizado === 'variable') esquema = 'Variable';
+    if (tipoGeneralNormalizado === 'fija' || tipoGeneralNormalizado === 'fijo') esquema = 'Fija';
     if (esquema !== 'Variable') continue;
 
     var asignacion = asignaciones[radKey] || buildEmptyAssignment_();

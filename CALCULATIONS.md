@@ -189,7 +189,10 @@
 - **Archivo y función:** `Code.gs`, `parseNumber_(value)`.
 - **Fórmula:**
   - Si ya es number, retorna el valor.
-  - Convierte string quitando `$`, puntos, cambiando coma por punto y quitando `%`.
+  - Convierte string quitando `$`, espacios y `%`.
+  - Si hay coma y punto, asume formato colombiano (`1.234,56`) y quita puntos de miles.
+  - Si solo hay coma, la usa como separador decimal.
+  - Si solo hay punto, conserva decimales como `0.015`; si el texto usa puntos de miles claros como `1.234.567` o `100.000`, los normaliza a entero.
   - `Number(text) || 0`.
 - **Entradas:** Número o string.
 - **Resultado:** Número.

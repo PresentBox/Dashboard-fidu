@@ -24,11 +24,11 @@
 
 ## BR-03 — Perfiles y roles
 
-- **Descripción:** Los roles vienen de asignaciones BTM y perfiles adicionales en `usuarios`; Súper Admin también tiene bootstrap.
+- **Descripción:** Los roles vienen de asignaciones BTM y perfiles adicionales en `usuarios`; Súper Admin se determina únicamente desde la tabla de perfiles `usuarios`.
 - **Archivo y función:** `Code.gs`, `getUserRolesForAssignment_()`, `getAdditionalProfiles_()`, `isSuperAdmin_()`, `buildRolesList_()`.
-- **Datos:** `CONT/BTM`, `usuarios`, `CONFIG.BOOTSTRAP_SUPER_ADMINS`.
+- **Datos:** `CONT/BTM`, `usuarios`.
 - **Resultado esperado:** Usuario recibe roles y permisos según correo.
-- **Casos especiales:** Hoja `usuarios` faltante no rompe bootstrap.
+- **Casos especiales:** Si la hoja `usuarios` falta o no contiene el perfil, no se otorga Súper Admin por código.
 - **Validaciones relacionadas:** Permisos de edición/preliquidación/facturación.
 - **Riesgo si se modifica:** Alto; puede abrir o bloquear accesos.
 
@@ -201,3 +201,28 @@
 - **Casos especiales:** Festivos no están modelados.
 - **Validaciones relacionadas:** Simulación de calendario.
 - **Riesgo si se modifica:** Medio; podría cambiar fechas de alertas.
+
+
+## BR-21 — Nuevo negocio con asignación notificada
+
+- **Descripción:** Al crear un negocio, `Tipo general` debe ser `Fija` o `Variable`, pueden registrarse varios tipos de comisión sugeridos, se muestran campos/preview de cálculo, se guardan preliquidaciones iniciales cuando el usuario captura valores y se notifica a gerente/profesional BTM asignados.
+- **Archivo y función:** `Code.gs`, `registrarNuevoNegocio()`, `notifyAssignedBtmNewBusiness_()`; `Index.html`, formulario `newBusinessForm`; `JS.html`, `crearNuevoNegocio()`.
+- **Datos:** `control`, `CONT/BTM`, `Tabla de comisiones`.
+- **Resultado esperado:** El negocio queda creado con asignación BTM/contable, las preliquidaciones iniciales con valores quedan en `preliquidaciones` y los BTM asignados reciben correo de aviso.
+- **Riesgo si se modifica:** Alto; afecta entrada de negocios y notificación operativa.
+
+## BR-22 — Reasignación temporal por BTM actual
+
+- **Descripción:** Solo el gerente BTM o profesional BTM actualmente asignado puede reasignar temporalmente gerente/profesional BTM en `CONT/BTM`.
+- **Archivo y función:** `Code.gs`, `reasignarBtmNegocio()`; `JS.html`, `crearBloqueReasignacionBtm()`.
+- **Datos:** `CONT/BTM` columnas W y X.
+- **Resultado esperado:** Usuarios no asignados no pueden reasignar el negocio.
+- **Riesgo si se modifica:** Alto; afecta control de asignaciones y confidencialidad.
+
+## BR-23 — Visualización sin preliquidación para negocios no activos
+
+- **Descripción:** Negocios en estado `Inactivo` o `En Liquidación` se pueden visualizar, pero no permiten generar preliquidaciones.
+- **Archivo y función:** `JS.html`, `crearFormularioPreliquidacion()`; `Code.gs`, `registrarPreliquidacionContrato()`.
+- **Datos:** `control` columna H.
+- **Resultado esperado:** La UI muestra bloqueo y el backend rechaza cualquier intento de preliquidar negocios no activos.
+- **Riesgo si se modifica:** Alto; puede permitir facturación sobre negocios no activos.
