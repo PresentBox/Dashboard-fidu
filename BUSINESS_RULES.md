@@ -24,11 +24,11 @@
 
 ## BR-03 — Perfiles y roles
 
-- **Descripción:** Los roles vienen de asignaciones BTM y perfiles adicionales en `usuarios`; Súper Admin también tiene bootstrap.
+- **Descripción:** Los roles vienen de asignaciones BTM y perfiles adicionales en `usuarios`; Súper Admin se determina únicamente desde la tabla de perfiles `usuarios`.
 - **Archivo y función:** `Code.gs`, `getUserRolesForAssignment_()`, `getAdditionalProfiles_()`, `isSuperAdmin_()`, `buildRolesList_()`.
-- **Datos:** `CONT/BTM`, `usuarios`, `CONFIG.BOOTSTRAP_SUPER_ADMINS`.
+- **Datos:** `CONT/BTM`, `usuarios`.
 - **Resultado esperado:** Usuario recibe roles y permisos según correo.
-- **Casos especiales:** Hoja `usuarios` faltante no rompe bootstrap.
+- **Casos especiales:** Si la hoja `usuarios` falta o no contiene el perfil, no se otorga Súper Admin por código.
 - **Validaciones relacionadas:** Permisos de edición/preliquidación/facturación.
 - **Riesgo si se modifica:** Alto; puede abrir o bloquear accesos.
 
@@ -44,12 +44,12 @@
 
 ## BR-05 — Visibilidad Facturación
 
-- **Descripción:** Facturación visualiza contratos con preliquidaciones del periodo actual pendientes de `FACTURADA`.
+- **Descripción:** Facturación visualiza negocios con una o varias preliquidaciones del periodo actual pendientes de facturar. La unidad de facturación es el negocio completo, no cada línea de comisión.
 - **Archivo y función:** `JS.html`, `debeMostrarContrato()`, `tienePreliquidacionesPorFacturar()`; `Code.gs`, `buildCrmResponse_()`.
-- **Datos:** Hoja `preliquidaciones` periodo actual, estado `estado_preliquidacion`.
-- **Resultado esperado:** Facturación ve valores a facturar y botón para dejar firme FIDUSAP.
-- **Casos especiales:** Preliquidaciones ya `FACTURADA` no aparecen como pendientes.
-- **Validaciones relacionadas:** `confirmarPreliquidacionFacturada()` valida perfil.
+- **Datos:** Hojas `preliquidaciones` y `facturacion`, periodo operativo actual.
+- **Resultado esperado:** Facturación ve el desglose por tipo y un único formulario consolidado con el total del negocio.
+- **Casos especiales:** Un negocio ya registrado en `facturacion` para el periodo deja de aparecer como pendiente.
+- **Validaciones relacionadas:** `registrarFacturacionNegocio()` valida perfil, periodo y existencia de preliquidaciones.
 - **Riesgo si se modifica:** Alto; puede facturar registros incorrectos.
 
 ## BR-06 — Periodo operativo con corte día 2
@@ -72,12 +72,12 @@
 - **Validaciones relacionadas:** `isSuperAdmin_()`, asignaciones.
 - **Riesgo si se modifica:** Alto; puede permitir preliquidaciones no autorizadas.
 
-## BR-08 — Preliquidación oculta de pendientes BTM
+## BR-08 — Preliquidación gestionada visible para BTM
 
-- **Descripción:** Si una radicación variable ya tiene preliquidación o cierre de liquidación del periodo, se oculta de la bandeja BTM.
+- **Descripción:** Si una radicación ya tiene preliquidación o cierre de liquidación del periodo, permanece visible para el BTM asignado con estado `Preliquidado`/gestión cerrada y se bloquea volver a preliquidar.
 - **Archivo y función:** `JS.html`, `debeMostrarContrato()`; `Code.gs`, `buildCrmResponse_()`.
 - **Datos:** `preliquidaciones`, `liquidaciones`, esquema de comisión.
-- **Resultado esperado:** Baja la métrica de pendientes del periodo actual.
+- **Resultado esperado:** La bandeja mantiene trazabilidad visual de contratos gestionados y la métrica de pendientes solo cuenta los contratos aún no preliquidados/cerrados.
 - **Casos especiales:** Facturación sí puede ver preliquidaciones pendientes.
 - **Validaciones relacionadas:** `preliquidadoPeriodoActual`, `liquidacionCerradaPeriodoActual`.
 - **Riesgo si se modifica:** Medio/alto; puede duplicar trabajo BTM.
@@ -92,25 +92,25 @@
 - **Validaciones relacionadas:** Selección obligatoria de al menos un tipo.
 - **Riesgo si se modifica:** Alto; afecta preliquidación y notificación.
 
-## BR-10 — Facturación deja firme una preliquidación
+## BR-10 — Facturación consolidada por negocio
 
-- **Descripción:** Solo Facturación o Súper Admin puede cambiar preliquidación a `FACTURADA`.
-- **Archivo y función:** `Code.gs`, `confirmarPreliquidacionFacturada()`.
-- **Datos:** ID preliquidación, factura FIDUSAP, usuario activo.
-- **Resultado esperado:** Se actualizan columnas M, N y O de `preliquidaciones`.
-- **Casos especiales:** Si no encuentra ID lanza error.
-- **Validaciones relacionadas:** Perfil Facturación.
+- **Descripción:** Solo Facturación o Súper Admin puede facturar el negocio completo del periodo. Todas sus líneas de preliquidación se consolidan en una única factura.
+- **Archivo y función:** `Code.gs`, `registrarFacturacionNegocio()`, `registrarFacturacionesNegocio_()`; `JS.html`, `registrarFacturaNegocio()`.
+- **Datos:** Radicación, Código FIDUSAP, periodo, fecha de facturación, valor total, factura FIDUSAP y CUFE.
+- **Resultado esperado:** Se agrega una fila en `facturacion` y todas las preliquidaciones del negocio/periodo pasan a `FACTURADA` con la misma factura, CUFE y fecha.
+- **Casos especiales:** El valor informado debe coincidir, redondeado al peso, con la suma de los totales preliquidados.
+- **Validaciones relacionadas:** Perfil Facturación, duplicado por radicación/periodo, coincidencia con `control` y `LockService`.
 - **Riesgo si se modifica:** Alto; afecta cierre contable/facturación.
 
-## BR-11 — Facturación de periodo
+## BR-11 — Importación masiva de facturación
 
-- **Descripción:** Perfil Facturación registra radicaciones como facturadas en hoja `facturacion`.
-- **Archivo y función:** `Code.gs`, `registrarFacturacionPeriodo()`.
-- **Datos:** Lista de radicaciones, periodo operativo, usuario activo.
-- **Resultado esperado:** Se agregan filas con estado `FACTURADO`.
-- **Casos especiales:** No hay deduplicación explícita comprobada en la función.
-- **Validaciones relacionadas:** Perfil Facturación.
-- **Riesgo si se modifica:** Alto; afecta histórico de facturación.
+- **Descripción:** Facturación puede cargar un CSV para registrar varios negocios completos en una operación.
+- **Archivo y función:** `JS.html`, `convertirCsvFacturacion()`, `importarFacturacionCsv()`; `Code.gs`, `importarFacturacionMasiva()`.
+- **Datos:** Columnas `radicacion`, `codigo_fidusap`, `periodo`, `fecha_facturacion`, `valor_facturado`, `factura_fidusap`, `cufe`.
+- **Resultado esperado:** Todas las filas se validan antes de escribir; si alguna falla, el lote no se registra.
+- **Casos especiales:** No admite radicaciones repetidas, periodos diferentes al operativo ni negocios ya facturados.
+- **Validaciones relacionadas:** Mismas validaciones del registro manual consolidado.
+- **Riesgo si se modifica:** Alto; afecta cargas masivas e integridad de datos.
 
 ## BR-12 — Cierre mensual de liquidación variable
 
@@ -147,7 +147,7 @@
 - **Descripción:** Nuevo negocio crea filas en `control` y `CONT/BTM`.
 - **Archivo y función:** `Code.gs`, `registrarNuevoNegocio()`.
 - **Datos:** Payload de formulario, usuario activo.
-- **Resultado esperado:** Radicación nueva en ambas hojas.
+- **Resultado esperado:** Radicación nueva en ambas hojas; en `CONT/BTM` se guarda Código Negocio FIDUSAP en columna B y Nombre del Negocio en columna D.
 - **Casos especiales:** Si ya existe radicación, lanza error.
 - **Validaciones relacionadas:** Radicación y nombre obligatorios.
 - **Riesgo si se modifica:** Alto; puede duplicar o perder asignaciones.
@@ -174,20 +174,20 @@
 
 ## BR-18 — Regla de porcentaje
 
-- **Descripción:** En campos porcentuales, valores `>= 1` se dividen entre 100.
+- **Descripción:** En campos porcentuales, todo valor no cero se divide entre 100; `1` significa 1%, `3` significa 3%, `0,3` significa 0,3% y `0,05` significa 0,05%.
 - **Archivo y función:** `Code.gs`, `normalizeRate_()`; `JS.html`, `normalizarPorcentaje()`.
 - **Datos:** Campo cantidad en modo `porcentaje`.
-- **Resultado esperado:** `1` = 1%, `3` = 3%, `0,03` = 3% si viene normalizado desde hoja.
+- **Resultado esperado:** `1` = 1%, `3` = 3%, `0,3` = 0,3%, `0,05` = 0,05%.
 - **Casos especiales:** Depende de que el campo haya sido inferido como porcentaje.
 - **Validaciones relacionadas:** `inferCommissionFieldMode_()`.
 - **Riesgo si se modifica:** Alto; altera valores a facturar.
 
 ## BR-19 — Regla de salarios mínimos
 
-- **Descripción:** En campos de salarios, la cantidad se multiplica directamente por SMMLV.
+- **Descripción:** En campos de salarios mínimos, solo se pide cantidad de salarios; el cálculo multiplica directamente cantidad × SMMLV y muestra el SMMLV parametrizado como campo bloqueado visible para el BTM.
 - **Archivo y función:** `Code.gs`, `calcularPreliquidacion_()`; `JS.html`, `calcularPreviewPreliqDesglosado()`.
 - **Datos:** SMMLV de `Tabla de comisiones` B1, cantidad ingresada.
-- **Resultado esperado:** `0,65` produce 0,65 × SMMLV.
+- **Resultado esperado:** `0,65` produce 0,65 × SMMLV; otros campos de la fila no intervienen si `cantidad` está en modo `salarios`.
 - **Casos especiales:** Requiere que el campo no esté en modo porcentaje.
 - **Validaciones relacionadas:** `inferCommissionFieldMode_()`.
 - **Riesgo si se modifica:** Alto; impacta contratos con salarios mínimos.
@@ -201,3 +201,36 @@
 - **Casos especiales:** Festivos no están modelados.
 - **Validaciones relacionadas:** Simulación de calendario.
 - **Riesgo si se modifica:** Medio; podría cambiar fechas de alertas.
+
+
+## BR-21 — Nuevo negocio con asignación notificada
+
+- **Descripción:** Al crear un negocio, `Tipo general` debe ser `Fija` o `Variable`, pueden registrarse varios tipos de comisión sugeridos, se muestran campos/preview de cálculo en una sección final dedicada, se guardan preliquidaciones iniciales cuando el usuario captura valores y se notifica a gerente/profesional BTM asignados.
+- **Archivo y función:** `Code.gs`, `registrarNuevoNegocio()`, `notifyAssignedBtmNewBusiness_()`; `Index.html`, formulario `newBusinessForm`; `JS.html`, `crearNuevoNegocio()`.
+- **Datos:** `control`, `CONT/BTM`, `Tabla de comisiones`.
+- **Resultado esperado:** El negocio queda creado con asignación BTM/contable, Código Negocio FIDUSAP en `CONT/BTM` columna B, Nombre del Negocio en columna D, las preliquidaciones iniciales con valores quedan en `preliquidaciones` y los BTM asignados reciben correo de aviso con plantilla visual estándar.
+- **Riesgo si se modifica:** Alto; afecta entrada de negocios y notificación operativa.
+
+## BR-22 — Reasignación temporal por BTM actual
+
+- **Descripción:** Solo el gerente BTM o profesional BTM actualmente asignado puede reasignar temporalmente gerente/profesional BTM en `CONT/BTM`.
+- **Archivo y función:** `Code.gs`, `reasignarBtmNegocio()`; `JS.html`, `crearBloqueReasignacionBtm()`.
+- **Datos:** `CONT/BTM` columnas W y X.
+- **Resultado esperado:** Usuarios no asignados no pueden reasignar el negocio.
+- **Riesgo si se modifica:** Alto; afecta control de asignaciones y confidencialidad.
+
+## BR-23 — Visualización sin preliquidación para negocios no activos
+
+- **Descripción:** Negocios en estado `Inactivo` o `En Liquidación` se pueden visualizar, pero no permiten generar preliquidaciones.
+- **Archivo y función:** `JS.html`, `crearFormularioPreliquidacion()`; `Code.gs`, `registrarPreliquidacionContrato()`.
+- **Datos:** `control` columna H.
+- **Resultado esperado:** La UI muestra bloqueo y el backend rechaza cualquier intento de preliquidar negocios no activos.
+- **Riesgo si se modifica:** Alto; puede permitir facturación sobre negocios no activos.
+
+## BR-24 — Filtros operativos de bandeja
+
+- **Descripción:** La bandeja permite filtrar por tipo de comisión, estado operativo (`Activo`, `Preliquidado`, `Pendiente`, `Inactivo`, `En Liquidación`) y buscar por radicación, código FIDUSAP o nombre/descripción del negocio.
+- **Archivo y función:** `JS.html`, `asegurarFiltroComision()`, `cambiarPerfilDeVista()`, `debeMostrarContrato()`.
+- **Datos:** `listaContratos` retornada por `Code.gs`.
+- **Resultado esperado:** El usuario puede ubicar contratos específicos sin alterar la lógica de permisos ni los cálculos de preliquidación.
+- **Riesgo si se modifica:** Medio; puede ocultar registros en UI si los filtros se aplican incorrectamente.

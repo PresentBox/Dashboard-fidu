@@ -6,7 +6,7 @@
 
 Fidu Gestión CRM es una aplicación web de Google Apps Script para apoyar la gestión de contratos fiduciarios, preliquidaciones, cambios de estado, alertas mensuales y registro de facturación sobre una base operativa en Google Sheets.
 
-El sistema centraliza datos provenientes de varias pestañas del spreadsheet, calcula métricas por perfil, permite a usuarios BTM generar preliquidaciones por tipo de comisión, notifica al perfil Facturación y permite marcar preliquidaciones como facturadas en FIDUSAP.
+El sistema centraliza datos provenientes de varias pestañas del spreadsheet, calcula métricas por perfil, permite a usuarios BTM generar preliquidaciones por tipo de comisión, notifica al perfil Facturación y permite registrar la factura consolidada del negocio con factura FIDUSAP, CUFE, fecha y valor validado.
 
 ## 2. Arquitectura actual
 
@@ -82,7 +82,8 @@ El frontend se sirve con `doGet()` y se comunica con Apps Script usando `google.
 ### `CONT/BTM`
 
 - A: Radicación.
-- B: Nombre.
+- B: Código Negocio FIDUSAP.
+- D: Nombre del negocio.
 - G: Profesional especializado contable.
 - W: Gerente BTM.
 - X: Profesional BTM.
@@ -118,7 +119,7 @@ No hay uso de `PropertiesService` en el código actual.
 
 ### LockService / concurrencia
 
-No hay uso de `LockService` en el código actual. Las operaciones de escritura usan `appendRow`, `setValue`, `setValues` y actualizaciones por rango, pero no están protegidas con locks. Esto es deuda técnica para operaciones concurrentes.
+El registro manual y masivo de facturación consolidada usa `LockService.getDocumentLock()` para impedir facturas duplicadas por concurrencia. Otras escrituras históricas continúan sin lock y mantienen esa deuda técnica.
 
 ## 9. Funciones principales del backend
 
@@ -131,9 +132,10 @@ No hay uso de `LockService` en el código actual. Las operaciones de escritura u
 | `guardarAjustesEnLote(paqueteCambios)` | Guarda cambios de estado en `control` y notifica a Facturación. |
 | `registrarPreliquidacionContrato(payload)` | Registra una preliquidación individual y notifica a Facturación. |
 | `registrarPreliquidacionesContrato(paquetes)` | Registra varias preliquidaciones para una radicación y retorna consolidado. |
-| `confirmarPreliquidacionFacturada(preliquidacionId, facturaFidusap)` | Facturación marca una preliquidación como `FACTURADA`. |
+| `registrarFacturacionNegocio(payload)` | Registra factura, CUFE, fecha y valor consolidado de un negocio. |
+| `importarFacturacionMasiva(registros)` | Valida y registra un lote CSV de facturas consolidadas. |
 | `registrarCierreLiquidacionMensual(radicaciones)` | Cierra liquidación mensual de contratos variables. |
-| `registrarFacturacionPeriodo(radicaciones)` | Registra negocios facturados para periodo operativo. |
+| `registrarFacturacionPeriodo(radicaciones)` | Endpoint legado bloqueado; orienta al flujo consolidado. |
 | `enviarAlertasLiquidacionBTM()` | Envía alertas programadas de liquidación. |
 | `crearTriggerAlertasLiquidacion()` | Crea trigger diario de alertas. |
 | `simularAlertasLiquidacionBTM(fechaISO)` | Simula alertas sin enviar correos. |
@@ -145,8 +147,8 @@ Desde `JS.html` se llaman:
 
 - `obtenerEcosistemaLiquidaciones()`.
 - `registrarPreliquidacionesContrato(payloads)`.
-- `confirmarPreliquidacionFacturada(preliquidacionId, factura)`.
-- `registrarFacturacionPeriodo(radicaciones)`.
+- `registrarFacturacionNegocio(payload)`.
+- `importarFacturacionMasiva(registros)`.
 - `guardarAjustesEnLote(loteCambiosPendientes)`.
 - `registrarCierreLiquidacionMensual([radicacion])`.
 - `ejecutarAccionServidor(radicacion, 'LIQUIDAR', monto, 'BTM')`.
@@ -169,14 +171,14 @@ No renombrar estas funciones sin actualizar `JS.html`.
 - El frontend calcula preview con subtotal, IVA y total.
 - Envía paquetes a `registrarPreliquidacionesContrato()`.
 - Backend registra en `preliquidaciones` y notifica a Facturación.
-- El contrato deja de aparecer en bandeja BTM del periodo si ya está preliquidado.
+- El contrato queda visible como gestionado/preliquidado y no permite repetir preliquidación del periodo.
 
 ### Facturación
 
-- Facturación ve preliquidaciones del periodo actual pendientes de `FACTURADA`.
-- Ve subtotal, IVA y valor a facturar.
-- Usa `Dejar en firme FIDUSAP` para guardar referencia.
-- Backend actualiza estado, factura y usuario facturador.
+- Facturación ve negocios con preliquidaciones del periodo actual pendientes.
+- Ve cada tipo de comisión y el total consolidado del negocio.
+- Registra factura FIDUSAP, CUFE y fecha manualmente, o importa un CSV con esos datos, periodo y valor.
+- Backend valida que el valor coincida con el total preliquidado, escribe una fila en `facturacion` y marca todas las líneas del negocio como `FACTURADA`.
 
 ### Nuevo negocio
 
@@ -202,15 +204,15 @@ No renombrar estas funciones sin actualizar `JS.html`.
 - `control` es fuente de verdad de estado del negocio.
 - `INV SFC` se usa como respaldo para alertar discrepancias.
 - Facturación se configura por hoja `usuarios`.
-- Súper Admin puede venir de `usuarios` o de bootstrap de emergencia.
+- Súper Admin se lee desde la hoja `usuarios`; ya no existe lista bootstrap de Súper Admin en código.
 - BTM/profesional/gerente solo actúan sobre contratos asignados.
 - Facturación puede ver todos los negocios/preliquidaciones que correspondan a su flujo.
-- Contratos variables preliquidados para el periodo se ocultan de la bandeja BTM.
+- Contratos preliquidados o cerrados del periodo permanecen visibles para el BTM asignado con estado `Preliquidado`/gestión cerrada y no permiten repetir preliquidación.
 - Periodo operativo: días 1 y 2 del mes trabajan el mes anterior; día 3 inicia nuevo periodo.
 - IVA de preliquidación por defecto: 19%.
 - Si el tipo de comisión trae IVA desde tabla, backend usa ese valor.
-- Porcentajes: `1` significa `1%`; valores mayores o iguales a 1 se dividen entre 100 en campos porcentuales.
-- Salarios mínimos: valores como `0,65` multiplican directamente por SMMLV.
+- Porcentajes: cualquier valor no cero se divide entre 100 en campos porcentuales; `1` = 1%, `3` = 3%, `0,3` = 0,3% y `0,05` = 0,05%.
+- Salarios mínimos: valores como `0,65` multiplican directamente por SMMLV; si el tipo usa salario mínimo, solo se captura cantidad de salarios y se muestra el SMMLV como campo bloqueado.
 
 ## 13. Estados actuales de procesos
 
@@ -253,7 +255,7 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Lecturas principales: `getDataRange().getValues()` o rangos completos según columnas requeridas.
 - Escrituras nuevas: `appendRow()` para facturación, liquidaciones, preliquidaciones y nuevo negocio.
 - Actualizaciones puntuales: `setValue()` para estados y confirmación de factura.
-- No hay control transaccional ni locks.
+- La facturación consolidada usa lock documental y escrituras agrupadas; los demás flujos aún no tienen control transaccional completo.
 
 ## 16. Dependencias entre funciones
 
@@ -270,19 +272,19 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Las hojas auxiliares se crean automáticamente si faltan para evitar fallos operativos.
 - Las reglas de periodo se calculan en backend, no en frontend.
 - El frontend recalcula métricas según vista/filtro visible.
-- Se conserva una lista bootstrap de Súper Admin por seguridad operativa.
+- No se conserva lista bootstrap de Súper Admin en código; los perfiles privilegiados deben mantenerse en la hoja `usuarios`.
 
 ## 18. Funcionalidades terminadas
 
 - Web app renderizable por Apps Script.
 - Carga de contratos y métricas.
-- Roles básicos y perfiles adicionales.
+- Roles básicos y perfiles adicionales desde `usuarios`.
 - Auditoría por usuario para Súper Admin.
 - Vista BTM y vista Facturación.
 - Preliquidación por uno o varios tipos de comisión.
 - Registro de preliquidaciones.
-- Confirmación de facturación FIDUSAP.
-- Registro de facturación de periodo.
+- Facturación consolidada por negocio con factura FIDUSAP, CUFE, fecha y valor validado.
+- Importación masiva de facturación mediante CSV.
 - Cierre mensual de liquidación.
 - Alertas mensuales con simuladores y wrappers de prueba.
 - Nuevo negocio con tipo de comisión sugerido.
@@ -298,7 +300,7 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 
 ## 20. Errores conocidos y riesgos pendientes
 
-- Sin `LockService`: riesgo de carreras si dos usuarios escriben al mismo tiempo.
+- `LockService` cubre la facturación consolidada; otros flujos de escritura aún tienen riesgo de carreras.
 - Sin `CacheService`: lecturas completas pueden ser costosas con hojas grandes.
 - Sin `PropertiesService`: configuración sensible a cambios directos en código.
 - Dependencia de nombres exactos de hojas.
@@ -324,4 +326,32 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 3. Definir si se permite más de una preliquidación del mismo tipo por radicación/periodo.
 4. Crear pruebas controladas para cada tipo de comisión.
 5. Confirmar si `ejecutarAccionServidor()` debe persistir una liquidación formal.
-6. Evaluar mover parámetros como URL, admins bootstrap y corte de periodo a configuración externa.
+6. Evaluar mover parámetros como URL, correo de pruebas y corte de periodo a configuración externa.
+
+
+## 23. Actualización de comportamiento — nuevo negocio y preliquidación por lote
+
+- El formulario Crear negocio permite seleccionar uno o varios tipos de comisión sugeridos, limita `Tipo general` a `Fija` o `Variable`, muestra campos/preview de cálculo y guarda preliquidaciones iniciales cuando se capturan valores.
+- Los campos de asignación BTM/contable usan catálogos de correos existentes construidos desde `CONT/BTM`.
+- Al crear un negocio, el sistema notifica por correo al gerente BTM y profesional BTM asignados.
+- Los negocios inactivos o en liquidación se visualizan para el BTM asignado, pero la preliquidación queda bloqueada.
+- El BTM actualmente asignado puede reasignar temporalmente gerente/profesional BTM desde la tarjeta del negocio.
+- El frontend permite preparar preliquidaciones de uno o varios negocios y guardarlas en un lote general.
+
+
+## 24. Versionado operativo
+
+- La aplicación expone `CONFIG.APP_VERSION` desde `Code.gs` y lo muestra en la UI como badge junto al título.
+- `VERSION.md` mantiene el historial operativo de entregas.
+- Cada cambio funcional debe incrementar la versión para facilitar validación entre GitHub y Apps Script.
+- Desde la versión 0.2.2, no hay correos bootstrap de Súper Admin en `Code.gs`; el perfil Súper Admin debe existir en `usuarios`.
+- Desde la versión 0.2.3, los mapas de facturación, liquidación y preliquidación normalizan periodos tipo fecha o texto `yyyy-MM` para reconocer correctamente registros del periodo actual.
+- Desde la versión 0.2.4, la bandeja BTM conserva visibles los contratos gestionados del periodo y los marca como `Preliquidado`/cerrados para mejorar trazabilidad de usuario.
+- Desde la versión 0.2.5, la bandeja incluye filtro por estado operativo y búsqueda por contrato/código/nombre para ubicar negocios específicos.
+- Desde la versión 0.2.6, `registrarNuevoNegocio()` guarda en `CONT/BTM` el código FIDUSAP en columna B y el nombre del negocio en columna D, sin cambiar el registro en `control`.
+- Desde la versión 0.2.7, el formulario `Crear negocio` agrupa `Tipos de comisión sugeridos`, `Descripción de comisiones` y el preview de preliquidación inicial al final para mantener alineadas las cajas operativas principales.
+- Desde la versión 0.2.8, los correos operativos reutilizan el look and feel HTML de las alertas diarias previas al vencimiento.
+- Desde la versión 0.2.9, la normalización porcentual divide todo valor no cero entre 100 para representar porcentajes decimales escritos por el usuario.
+- Desde la versión 0.2.10, los tipos con `cantidad` en modo salarios calculan exclusivamente cantidad × SMMLV y muestran el SMMLV como campo bloqueado visible.
+
+- Desde la versión 0.2.11, Facturación registra el negocio completo del periodo, exige factura FIDUSAP, CUFE y fecha, valida el valor consolidado y permite importación CSV protegida con lock.
