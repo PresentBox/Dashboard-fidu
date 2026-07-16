@@ -184,10 +184,10 @@
 
 ## BR-19 — Regla de salarios mínimos
 
-- **Descripción:** En campos de salarios, la cantidad se multiplica directamente por SMMLV.
+- **Descripción:** En campos de salarios mínimos, solo se pide cantidad de salarios; el cálculo multiplica directamente cantidad × SMMLV y muestra el SMMLV parametrizado como campo bloqueado visible para el BTM.
 - **Archivo y función:** `Code.gs`, `calcularPreliquidacion_()`; `JS.html`, `calcularPreviewPreliqDesglosado()`.
 - **Datos:** SMMLV de `Tabla de comisiones` B1, cantidad ingresada.
-- **Resultado esperado:** `0,65` produce 0,65 × SMMLV.
+- **Resultado esperado:** `0,65` produce 0,65 × SMMLV; otros campos de la fila no intervienen si `cantidad` está en modo `salarios`.
 - **Casos especiales:** Requiere que el campo no esté en modo porcentaje.
 - **Validaciones relacionadas:** `inferCommissionFieldMode_()`.
 - **Riesgo si se modifica:** Alto; impacta contratos con salarios mínimos.

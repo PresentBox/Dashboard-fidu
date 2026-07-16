@@ -3,7 +3,7 @@
 // ============================================================================
 const CONFIG = {
   APP_TITLE: 'Fidu Gestión - CRM Lotes',
-  APP_VERSION: '0.2.9',
+  APP_VERSION: '0.2.10',
   SHEETS: {
     CONTROL: 'control',
     BTM: 'CONT/BTM',
@@ -1179,7 +1179,9 @@ function calcularPreliquidacion_(tipo, valores) {
 
   var enabled = tipo.campos || {};
   var subtotal = 0;
-  if (enabled.saldoUvr && enabled.saldoUvr.enabled && enabled.valorUvr && enabled.valorUvr.enabled) {
+  if (usesMinimumWageCalculation_(tipo)) {
+    subtotal = cantidad * (tipo.smmlv || 0);
+  } else if (enabled.saldoUvr && enabled.saldoUvr.enabled && enabled.valorUvr && enabled.valorUvr.enabled) {
     subtotal = saldoUvr * valorUvr;
   } else if (enabled.saldoUvr && enabled.saldoUvr.enabled && enabled.cantidad && enabled.cantidad.enabled) {
     subtotal = saldoUvr * normalizeRate_(cantidad);
@@ -1200,6 +1202,10 @@ function calcularPreliquidacion_(tipo, valores) {
     total: Math.round(subtotal + ivaValor),
     ivaRate: ivaRate
   };
+}
+
+function usesMinimumWageCalculation_(tipo) {
+  return !!(tipo && tipo.campos && tipo.campos.cantidad && tipo.campos.cantidad.enabled && tipo.campos.cantidad.modo === 'salarios');
 }
 
 function normalizeRate_(value) {

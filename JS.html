@@ -177,9 +177,11 @@
         total.textContent = 'Subtotal: ' + formatoMoneda(desglose.subtotal) + ' | IVA 19%: ' + formatoMoneda(desglose.iva) + ' | Total estimado: ' + formatoMoneda(desglose.total);
       }
 
+      var esSalarioMinimo = usaCalculoSalarioMinimo(tipo);
       Object.keys(tipo.campos || {}).forEach(function(key) {
         var campo = tipo.campos[key];
         if (!campo.enabled || key === 'iva') return;
+        if (esSalarioMinimo && key !== 'cantidad') return;
         var label = document.createElement('label');
         label.className = 'preliq-field';
         label.innerHTML = '<span></span><input type="number" step="0.01" min="0">';
@@ -190,6 +192,8 @@
         input.oninput = actualizarTotal;
         campos.appendChild(label);
       });
+
+      if (esSalarioMinimo) campos.appendChild(crearCampoSmmlvBloqueado(tipo));
 
       card.appendChild(titulo);
       card.appendChild(descripcion);
@@ -556,9 +560,11 @@
       fields.innerHTML = '';
       var tipo = obtenerTipoComision(select.value);
       if (!tipo) return;
+      var esSalarioMinimo = usaCalculoSalarioMinimo(tipo);
       Object.keys(tipo.campos).forEach(function(key) {
         var campo = tipo.campos[key];
         if (!campo.enabled || key === 'iva') return;
+        if (esSalarioMinimo && key !== 'cantidad') return;
         var label = document.createElement('label');
         label.className = 'preliq-field';
         label.innerHTML = '<span></span><input type="number" step="0.01" min="0">';
@@ -568,6 +574,7 @@
         label.querySelector('input').oninput = actualizarPreview;
         fields.appendChild(label);
       });
+      if (esSalarioMinimo) fields.appendChild(crearCampoSmmlvBloqueado(tipo));
       actualizarPreview();
     }
 
@@ -836,6 +843,18 @@
     return (cacheDatos.tiposComision || []).filter(function(tipo) { return tipo.tipo === nombre; })[0] || null;
   }
 
+  function usaCalculoSalarioMinimo(tipo) {
+    return !!(tipo && tipo.campos && tipo.campos.cantidad && tipo.campos.cantidad.enabled && tipo.campos.cantidad.modo === 'salarios');
+  }
+
+  function crearCampoSmmlvBloqueado(tipo) {
+    var label = document.createElement('label');
+    label.className = 'preliq-field preliq-field-readonly';
+    label.innerHTML = '<span>Salario mínimo parametrizado</span><input type="text" readonly>';
+    label.querySelector('input').value = formatoMoneda(tipo.smmlv || 0);
+    return label;
+  }
+
   function leerValoresPreliq(container) {
     var valores = {};
     Array.prototype.forEach.call(container.querySelectorAll('input[data-key]'), function(input) {
@@ -853,7 +872,8 @@
     if (!tipo) return { subtotal: 0, iva: 0, total: 0 };
     var campos = tipo.campos || {};
     var subtotal = 0;
-    if (campos.saldoUvr && campos.saldoUvr.enabled && campos.valorUvr && campos.valorUvr.enabled) subtotal = valores.saldoUvr * valores.valorUvr;
+    if (usaCalculoSalarioMinimo(tipo)) subtotal = valores.cantidad * (tipo.smmlv || 0);
+    else if (campos.saldoUvr && campos.saldoUvr.enabled && campos.valorUvr && campos.valorUvr.enabled) subtotal = valores.saldoUvr * valores.valorUvr;
     else if (campos.saldoUvr && campos.saldoUvr.enabled && campos.cantidad && campos.cantidad.enabled) subtotal = valores.saldoUvr * (campos.cantidad.modo === 'porcentaje' ? normalizarPorcentaje(valores.cantidad) : (valores.cantidad || 1));
     else if (campos.valorUvr && campos.valorUvr.enabled && campos.cantidad && campos.cantidad.enabled) subtotal = valores.valorUvr * (campos.cantidad.modo === 'porcentaje' ? normalizarPorcentaje(valores.cantidad) : (valores.cantidad || 1));
     else if (campos.valorUvr && campos.valorUvr.enabled) subtotal = valores.valorUvr;

@@ -94,12 +94,13 @@
 - **Archivo y función:** `Code.gs`, `calcularPreliquidacion_(tipo, valores)`.
 - **Entradas:** Tipo de comisión, campos habilitados, `saldoUvr`, `valorUvr`, `cantidad`, `iva`, `smmlv`.
 - **Fórmula de subtotal según campos habilitados:**
-  1. Si `saldoUvr` y `valorUvr` habilitados: `subtotal = saldoUvr × valorUvr`.
-  2. Si `saldoUvr` y `cantidad` habilitados: `subtotal = saldoUvr × normalizeRate_(cantidad)`.
-  3. Si `valorUvr` y `cantidad` habilitados: `subtotal = valorUvr × (cantidad normalizada si modo porcentaje, o cantidad/1 si no)`.
-  4. Si solo `valorUvr` habilitado: `subtotal = valorUvr`.
-  5. Si solo `cantidad` habilitada: `subtotal = cantidad × smmlv`.
-  6. Si solo `saldoUvr` habilitado: `subtotal = saldoUvr`.
+  1. Si `cantidad` está habilitada en modo `salarios`: `subtotal = cantidad × smmlv`, aunque existan otros campos habilitados en la fila.
+  2. Si `saldoUvr` y `valorUvr` habilitados: `subtotal = saldoUvr × valorUvr`.
+  3. Si `saldoUvr` y `cantidad` habilitados: `subtotal = saldoUvr × normalizeRate_(cantidad)`.
+  4. Si `valorUvr` y `cantidad` habilitados: `subtotal = valorUvr × (cantidad normalizada si modo porcentaje, o cantidad/1 si no)`.
+  5. Si solo `valorUvr` habilitado: `subtotal = valorUvr`.
+  6. Si solo `cantidad` habilitada: `subtotal = cantidad × smmlv`.
+  7. Si solo `saldoUvr` habilitado: `subtotal = saldoUvr`.
 - **IVA:**
   - `ivaRate = parseNumber_(valores.iva)`.
   - Si no hay IVA, usa `0.19`.
@@ -111,8 +112,8 @@
 - **Ejemplos comprobables:**
   - Valor base 52.500.000 y cantidad 3 en modo porcentaje: subtotal 1.575.000; IVA 299.250; total 1.874.250.
   - SMMLV 1.750.905 y cantidad 0,65 en modo salarios: subtotal 1.138.088; IVA 216.237; total 1.354.325, con redondeo Math.round.
-- **Casos límite:** Si ningún campo relevante está habilitado, subtotal queda 0.
-- **Relación frontend/backend:** Frontend muestra preview, backend recalcula al guardar.
+- **Casos límite:** Si `cantidad` está en modo `salarios`, el cálculo ignora saldos/valor UVR y solo usa cantidad × SMMLV; si ningún campo relevante está habilitado, subtotal queda 0.
+- **Relación frontend/backend:** Frontend muestra preview, backend recalcula al guardar. Para modo `salarios`, el frontend muestra el SMMLV parametrizado como campo bloqueado visible.
 
 ## 8. Cálculo de preliquidación — frontend
 

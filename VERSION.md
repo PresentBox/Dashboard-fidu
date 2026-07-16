@@ -2,9 +2,14 @@
 
 ## Versión actual
 
-- **Versión:** 0.2.9
+- **Versión:** 0.2.10
 - **Fecha:** 2026-07-16
-- **Entrega:** Ajusta la normalización de porcentajes para que valores decimales escritos por el usuario se interpreten como porcentaje real.
+- **Entrega:** Simplifica tipos de comisión con salario mínimo para calcular solo cantidad de salarios × SMMLV y mostrar el SMMLV bloqueado al BTM.
+
+## 0.2.10
+
+- Los tipos con `cantidad` en modo `salarios` calculan exclusivamente `cantidad × smmlv`, ignorando saldos o valores UVR que puedan estar habilitados en la fila.
+- El frontend muestra el SMMLV parametrizado como campo bloqueado visible en preliquidación y preview de nuevo negocio.
 
 ## 0.2.9
 
