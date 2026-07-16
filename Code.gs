@@ -3,7 +3,7 @@
 // ============================================================================
 const CONFIG = {
   APP_TITLE: 'Fidu Gestión - CRM Lotes',
-  APP_VERSION: '0.2.5',
+  APP_VERSION: '0.2.6',
   SHEETS: {
     CONTROL: 'control',
     BTM: 'CONT/BTM',
@@ -26,7 +26,9 @@ const CONFIG = {
   },
   BTM_COLS: {
     RADICACION: 0,
-    NOMBRE: 1,
+    CODIGO_FIDUSAP: 1,
+    NOMBRE_LEGACY: 1,
+    NOMBRE: 3,
     PROFESIONAL_CONTABLE: 6,
     GERENTE: 22,
     PROFESIONAL_BTM: 23
@@ -145,6 +147,7 @@ function registrarNuevoNegocio(payload) {
 
   var btmRow = new Array(24).fill('');
   btmRow[CONFIG.BTM_COLS.RADICACION] = radicacion;
+  btmRow[CONFIG.BTM_COLS.CODIGO_FIDUSAP] = toCleanString_(payload.codigoFidusap);
   btmRow[CONFIG.BTM_COLS.NOMBRE] = nombre;
   btmRow[CONFIG.BTM_COLS.PROFESIONAL_CONTABLE] = normalizeEmail_(payload.profesionalContable);
   btmRow[CONFIG.BTM_COLS.GERENTE] = normalizeEmail_(payload.gerenteBtm) || email;
@@ -420,7 +423,7 @@ function buildBtmAssignmentsMap_(datosBTM) {
     if (!radicacion || isHeaderLike_(radicacion)) continue;
 
     mapaAsignacionesBTM[radicacion] = {
-      nombreBTM: toCleanString_(datosBTM[row][CONFIG.BTM_COLS.NOMBRE]) || 'Sin Nombre Especificado',
+      nombreBTM: toCleanString_(datosBTM[row][CONFIG.BTM_COLS.NOMBRE]) || toCleanString_(datosBTM[row][CONFIG.BTM_COLS.NOMBRE_LEGACY]) || 'Sin Nombre Especificado',
       profesionalContable: normalizeEmail_(datosBTM[row][CONFIG.BTM_COLS.PROFESIONAL_CONTABLE]),
       gerente: normalizeEmail_(datosBTM[row][CONFIG.BTM_COLS.GERENTE]),
       profesionalBtm: normalizeEmail_(datosBTM[row][CONFIG.BTM_COLS.PROFESIONAL_BTM])

@@ -2,9 +2,9 @@
 
 ## Versión actual
 
-- **Versión:** 0.2.5
+- **Versión:** 0.2.6
 - **Fecha:** 2026-07-16
-- **Entrega:** Agrega filtros de bandeja por estado operativo y búsqueda por contrato/código/nombre para ubicar negocios específicos con mayor facilidad.
+- **Entrega:** Corrige el alta de nuevos contratos en `CONT/BTM` para guardar Código Negocio FIDUSAP en columna B y Nombre del Negocio en columna D, manteniendo intacto el registro en `control`.
 
 ## Política de versionado operativa
 

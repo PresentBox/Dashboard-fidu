@@ -82,7 +82,8 @@ El frontend se sirve con `doGet()` y se comunica con Apps Script usando `google.
 ### `CONT/BTM`
 
 - A: Radicación.
-- B: Nombre.
+- B: Código Negocio FIDUSAP.
+- D: Nombre del negocio.
 - G: Profesional especializado contable.
 - W: Gerente BTM.
 - X: Profesional BTM.
@@ -169,7 +170,7 @@ No renombrar estas funciones sin actualizar `JS.html`.
 - El frontend calcula preview con subtotal, IVA y total.
 - Envía paquetes a `registrarPreliquidacionesContrato()`.
 - Backend registra en `preliquidaciones` y notifica a Facturación.
-- El contrato deja de aparecer en bandeja BTM del periodo si ya está preliquidado.
+- El contrato queda visible como gestionado/preliquidado y no permite repetir preliquidación del periodo.
 
 ### Facturación
 
@@ -346,3 +347,4 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Desde la versión 0.2.3, los mapas de facturación, liquidación y preliquidación normalizan periodos tipo fecha o texto `yyyy-MM` para reconocer correctamente registros del periodo actual.
 - Desde la versión 0.2.4, la bandeja BTM conserva visibles los contratos gestionados del periodo y los marca como `Preliquidado`/cerrados para mejorar trazabilidad de usuario.
 - Desde la versión 0.2.5, la bandeja incluye filtro por estado operativo y búsqueda por contrato/código/nombre para ubicar negocios específicos.
+- Desde la versión 0.2.6, `registrarNuevoNegocio()` guarda en `CONT/BTM` el código FIDUSAP en columna B y el nombre del negocio en columna D, sin cambiar el registro en `control`.

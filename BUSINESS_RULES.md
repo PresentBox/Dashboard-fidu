@@ -147,7 +147,7 @@
 - **Descripción:** Nuevo negocio crea filas en `control` y `CONT/BTM`.
 - **Archivo y función:** `Code.gs`, `registrarNuevoNegocio()`.
 - **Datos:** Payload de formulario, usuario activo.
-- **Resultado esperado:** Radicación nueva en ambas hojas.
+- **Resultado esperado:** Radicación nueva en ambas hojas; en `CONT/BTM` se guarda Código Negocio FIDUSAP en columna B y Nombre del Negocio en columna D.
 - **Casos especiales:** Si ya existe radicación, lanza error.
 - **Validaciones relacionadas:** Radicación y nombre obligatorios.
 - **Riesgo si se modifica:** Alto; puede duplicar o perder asignaciones.
@@ -208,7 +208,7 @@
 - **Descripción:** Al crear un negocio, `Tipo general` debe ser `Fija` o `Variable`, pueden registrarse varios tipos de comisión sugeridos, se muestran campos/preview de cálculo, se guardan preliquidaciones iniciales cuando el usuario captura valores y se notifica a gerente/profesional BTM asignados.
 - **Archivo y función:** `Code.gs`, `registrarNuevoNegocio()`, `notifyAssignedBtmNewBusiness_()`; `Index.html`, formulario `newBusinessForm`; `JS.html`, `crearNuevoNegocio()`.
 - **Datos:** `control`, `CONT/BTM`, `Tabla de comisiones`.
-- **Resultado esperado:** El negocio queda creado con asignación BTM/contable, las preliquidaciones iniciales con valores quedan en `preliquidaciones` y los BTM asignados reciben correo de aviso.
+- **Resultado esperado:** El negocio queda creado con asignación BTM/contable, Código Negocio FIDUSAP en `CONT/BTM` columna B, Nombre del Negocio en columna D, las preliquidaciones iniciales con valores quedan en `preliquidaciones` y los BTM asignados reciben correo de aviso.
 - **Riesgo si se modifica:** Alto; afecta entrada de negocios y notificación operativa.
 
 ## BR-22 — Reasignación temporal por BTM actual
