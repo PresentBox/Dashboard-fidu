@@ -2,9 +2,9 @@
 
 ## Versión actual
 
-- **Versión:** 0.2.2
+- **Versión:** 0.2.3
 - **Fecha:** 2026-07-16
-- **Entrega:** Consolida la versión de Crear negocio con `leerPreliquidacionesInicialesNuevoNegocio()` y elimina los correos bootstrap de Súper Admin para que el perfil se tome únicamente desde `usuarios`.
+- **Entrega:** Normaliza periodos guardados como fecha o texto para que las preliquidaciones del periodo se reconozcan, se muestre estado Preliquidado y Facturación vea los pendientes.
 
 ## Política de versionado operativa
 

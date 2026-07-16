@@ -296,7 +296,7 @@
       if (item.esquemaComision === 'Variable' || item.esquemaComision === 'Fija') acc.totalContratosComision++;
       if (item.validacionSFC !== 'OK') acc.discrepancias++;
       if (cacheDatos.esFacturacion) {
-        if (normalizarEstado(item.estadoActual) === 'activo' && !item.facturadoPeriodoActual) acc.pendientesFacturacionPeriodo++;
+        if (tienePreliquidacionesPorFacturar(item)) acc.pendientesFacturacionPeriodo++;
       } else if (item.esquemaComision === 'Variable' && normalizarEstado(item.estadoActual) === 'activo' && !item.preliquidadoPeriodoActual && !item.liquidacionCerradaPeriodoActual) {
         acc.pendientesFacturacionPeriodo++;
       }

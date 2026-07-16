@@ -44,7 +44,7 @@
 
 ## BR-05 — Visibilidad Facturación
 
-- **Descripción:** Facturación visualiza contratos con preliquidaciones del periodo actual pendientes de `FACTURADA`.
+- **Descripción:** Facturación visualiza contratos con preliquidaciones del periodo actual pendientes de `FACTURADA`, aunque la columna periodo haya quedado como texto `yyyy-MM` o como fecha interpretada por Sheets.
 - **Archivo y función:** `JS.html`, `debeMostrarContrato()`, `tienePreliquidacionesPorFacturar()`; `Code.gs`, `buildCrmResponse_()`.
 - **Datos:** Hoja `preliquidaciones` periodo actual, estado `estado_preliquidacion`.
 - **Resultado esperado:** Facturación ve valores a facturar y botón para dejar firme FIDUSAP.
@@ -74,7 +74,7 @@
 
 ## BR-08 — Preliquidación oculta de pendientes BTM
 
-- **Descripción:** Si una radicación variable ya tiene preliquidación o cierre de liquidación del periodo, se oculta de la bandeja BTM.
+- **Descripción:** Si una radicación variable ya tiene preliquidación o cierre de liquidación del periodo, se oculta de la bandeja BTM; en negocios fijos/preliquidados visibles se muestra estado `Preliquidado` y se bloquea volver a preliquidar.
 - **Archivo y función:** `JS.html`, `debeMostrarContrato()`; `Code.gs`, `buildCrmResponse_()`.
 - **Datos:** `preliquidaciones`, `liquidaciones`, esquema de comisión.
 - **Resultado esperado:** Baja la métrica de pendientes del periodo actual.

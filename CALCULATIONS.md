@@ -9,7 +9,7 @@
   - Obtener día del mes según `Session.getScriptTimeZone()`.
   - Si `día <= CONFIG.PERIOD_CUTOFF_DAY` (2), usar mes anterior.
   - Si `día >= 3`, usar mes actual.
-  - Formato: `yyyy-MM`.
+  - Formato: `yyyy-MM`; al leer hojas históricas se normalizan periodos guardados como texto o como fecha interpretada por Google Sheets.
 - **Entradas:** Fecha actual del script.
 - **Salida:** Periodo operativo string.
 - **Redondeo:** No aplica.

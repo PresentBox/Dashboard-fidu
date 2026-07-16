@@ -3,7 +3,7 @@
 // ============================================================================
 const CONFIG = {
   APP_TITLE: 'Fidu Gestión - CRM Lotes',
-  APP_VERSION: '0.2.2',
+  APP_VERSION: '0.2.3',
   SHEETS: {
     CONTROL: 'control',
     BTM: 'CONT/BTM',
@@ -697,6 +697,21 @@ function getCurrentBillingPeriod_() {
   return Utilities.formatDate(periodDate, timeZone, CONFIG.CURRENT_PERIOD_FORMAT);
 }
 
+function normalizePeriodValue_(value) {
+  if (!value) return '';
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), CONFIG.CURRENT_PERIOD_FORMAT);
+  }
+  var text = toCleanString_(value).replace(/^'/, '');
+  var dateMatch = text.match(/^(\d{4})[-\/](\d{1,2})(?:[-\/]\d{1,2})?$/);
+  if (dateMatch) return dateMatch[1] + '-' + ('0' + dateMatch[2]).slice(-2);
+  var parsed = new Date(text);
+  if (!isNaN(parsed.getTime()) && /\d{4}/.test(text)) {
+    return Utilities.formatDate(parsed, Session.getScriptTimeZone(), CONFIG.CURRENT_PERIOD_FORMAT);
+  }
+  return text;
+}
+
 function buildCurrentPeriodBillingMap_(book) {
   var sheet = book.getSheetByName(CONFIG.SHEETS.FACTURACION);
   var map = {};
@@ -705,7 +720,7 @@ function buildCurrentPeriodBillingMap_(book) {
   var currentPeriod = getCurrentBillingPeriod_();
   var values = sheet.getDataRange().getValues();
   for (var row = 1; row < values.length; row++) {
-    var period = toCleanString_(values[row][1]);
+    var period = normalizePeriodValue_(values[row][1]);
     var radicacion = normalizeKey_(values[row][2]);
     if (period === currentPeriod && radicacion) map[radicacion] = true;
   }
@@ -721,7 +736,7 @@ function buildCurrentPeriodLiquidationMap_(book) {
   var currentPeriod = getCurrentBillingPeriod_();
   var values = sheet.getDataRange().getValues();
   for (var row = 1; row < values.length; row++) {
-    var period = toCleanString_(values[row][1]);
+    var period = normalizePeriodValue_(values[row][1]);
     var radicacion = normalizeKey_(values[row][2]);
     if (period === currentPeriod && radicacion) map[radicacion] = true;
   }
@@ -933,13 +948,13 @@ function buildCurrentPeriodPreliquidationMap_(book) {
   var period = getCurrentBillingPeriod_();
   var values = sheet.getDataRange().getValues();
   for (var row = 1; row < values.length; row++) {
-    if (toCleanString_(values[row][1]) !== period) continue;
+    if (normalizePeriodValue_(values[row][1]) !== period) continue;
     var key = normalizeKey_(values[row][3]);
     if (!key) continue;
     if (!map[key]) map[key] = [];
     map[key].push({
       fecha: formatSheetDate_(values[row][0]),
-      periodo: toCleanString_(values[row][1]),
+      periodo: normalizePeriodValue_(values[row][1]),
       id: toCleanString_(values[row][2]),
       radicacion: toCleanString_(values[row][3]),
       tipoComision: toCleanString_(values[row][6]),
@@ -966,7 +981,7 @@ function buildLatestPreliquidationMap_(book) {
     var record = {
       fecha: formatSheetDate_(values[row][0]),
       fechaSerial: values[row][0] instanceof Date ? values[row][0].getTime() : row,
-      periodo: toCleanString_(values[row][1]),
+      periodo: normalizePeriodValue_(values[row][1]),
       id: toCleanString_(values[row][2]),
       radicacion: toCleanString_(values[row][3]),
       tipoComision: toCleanString_(values[row][6]),
