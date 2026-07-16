@@ -21,7 +21,7 @@ Crea una hoja llamada `usuarios` para perfiles adicionales que deben ver todos l
 Notas:
 
 - El perfil `Facturación` puede escribirse con o sin tilde; el sistema lo normaliza.
-- El perfil `Súper Admin` también puede administrarse en esta hoja; el código conserva una lista bootstrap mínima en `Code.gs` solo como respaldo de emergencia si la hoja aún no existe o queda mal configurada.
+- El perfil `Súper Admin` se administra desde esta hoja; el código no conserva correos bootstrap de Súper Admin.
 - Usa `NO`, `INACTIVO` o `FALSE` en la columna C para desactivar un usuario.
 
 ## Hoja `facturacion`
@@ -175,7 +175,7 @@ Columnas creadas automáticamente en `preliquidaciones`:
 | O | usuario_factura |
 | P | descripcion_comision |
 
-Cuando existe al menos una preliquidación del periodo para una radicación, esa radicación deja de aparecer en los alertamientos mensuales de pendiente por preliquidar y se oculta de la bandeja operativa BTM del periodo. Facturación puede dejarla en firme con el botón `Dejar en firme FIDUSAP`, que cambia el estado a `FACTURADA` y registra la referencia de factura.
+Cuando existe al menos una preliquidación del periodo para una radicación, esa radicación deja de aparecer en los alertamientos mensuales de pendiente por preliquidar y queda visible como gestionada/preliquidada en la bandeja BTM del periodo. Facturación puede dejarla en firme con el botón `Dejar en firme FIDUSAP`, que cambia el estado a `FACTURADA` y registra la referencia de factura.
 
 ### Ajustes de cálculo de preliquidación
 
@@ -185,7 +185,7 @@ En el frontend el usuario puede agregar uno o varios tipos de comisión a un res
 
 ## Creación de nuevo negocio
 
-El menú lateral mantiene tres acciones principales: Home, Preliquidación y Crear nuevo negocio. La opción de nuevo negocio muestra un formulario en blanco para que un BTM registre una radicación nueva con datos abiertos de control, asignaciones BTM, tipo de comisión sugerido desde `Tabla de comisiones` y descripción de comisiones. Al guardar, el sistema agrega la fila en `control` y la asignación en `CONT/BTM`.
+El menú lateral mantiene tres acciones principales: Home, Preliquidación y Crear nuevo negocio. La opción de nuevo negocio muestra un formulario en blanco para que un BTM registre una radicación nueva con datos abiertos de control, asignaciones BTM, tipo de comisión sugerido desde `Tabla de comisiones` y descripción de comisiones. Al guardar, el sistema agrega la fila en `control` y la asignación en `CONT/BTM`; en `CONT/BTM` guarda Código Negocio FIDUSAP en columna B y Nombre del Negocio en columna D.
 
 Las métricas de gestión se calculan sobre la vista/filtro actual e incluyen contratos activos, variables, discrepancias, inactivos y en liquidación. En la vista BTM, el indicador de pendientes del periodo actual baja cuando un contrato variable queda preliquidado; en la vista Facturación se mantiene como preliquidaciones pendientes de dejar en firme/facturar. El periodo cambia automáticamente con el reloj del script (`yyyy-MM`) bajo corte día 2: por ejemplo, del 1 al 2 de agosto aún se trabaja julio; el 3 de agosto inicia agosto y se vuelve a evaluar la hoja `preliquidaciones` contra ese nuevo periodo.
 

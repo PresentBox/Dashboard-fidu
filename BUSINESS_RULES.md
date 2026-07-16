@@ -24,11 +24,11 @@
 
 ## BR-03 — Perfiles y roles
 
-- **Descripción:** Los roles vienen de asignaciones BTM y perfiles adicionales en `usuarios`; Súper Admin también tiene bootstrap.
+- **Descripción:** Los roles vienen de asignaciones BTM y perfiles adicionales en `usuarios`; Súper Admin se determina únicamente desde la tabla de perfiles `usuarios`.
 - **Archivo y función:** `Code.gs`, `getUserRolesForAssignment_()`, `getAdditionalProfiles_()`, `isSuperAdmin_()`, `buildRolesList_()`.
-- **Datos:** `CONT/BTM`, `usuarios`, `CONFIG.BOOTSTRAP_SUPER_ADMINS`.
+- **Datos:** `CONT/BTM`, `usuarios`.
 - **Resultado esperado:** Usuario recibe roles y permisos según correo.
-- **Casos especiales:** Hoja `usuarios` faltante no rompe bootstrap.
+- **Casos especiales:** Si la hoja `usuarios` falta o no contiene el perfil, no se otorga Súper Admin por código.
 - **Validaciones relacionadas:** Permisos de edición/preliquidación/facturación.
 - **Riesgo si se modifica:** Alto; puede abrir o bloquear accesos.
 
@@ -44,7 +44,7 @@
 
 ## BR-05 — Visibilidad Facturación
 
-- **Descripción:** Facturación visualiza contratos con preliquidaciones del periodo actual pendientes de `FACTURADA`.
+- **Descripción:** Facturación visualiza contratos con preliquidaciones del periodo actual pendientes de `FACTURADA`, aunque la columna periodo haya quedado como texto `yyyy-MM` o como fecha interpretada por Sheets.
 - **Archivo y función:** `JS.html`, `debeMostrarContrato()`, `tienePreliquidacionesPorFacturar()`; `Code.gs`, `buildCrmResponse_()`.
 - **Datos:** Hoja `preliquidaciones` periodo actual, estado `estado_preliquidacion`.
 - **Resultado esperado:** Facturación ve valores a facturar y botón para dejar firme FIDUSAP.
@@ -72,12 +72,12 @@
 - **Validaciones relacionadas:** `isSuperAdmin_()`, asignaciones.
 - **Riesgo si se modifica:** Alto; puede permitir preliquidaciones no autorizadas.
 
-## BR-08 — Preliquidación oculta de pendientes BTM
+## BR-08 — Preliquidación gestionada visible para BTM
 
-- **Descripción:** Si una radicación variable ya tiene preliquidación o cierre de liquidación del periodo, se oculta de la bandeja BTM.
+- **Descripción:** Si una radicación ya tiene preliquidación o cierre de liquidación del periodo, permanece visible para el BTM asignado con estado `Preliquidado`/gestión cerrada y se bloquea volver a preliquidar.
 - **Archivo y función:** `JS.html`, `debeMostrarContrato()`; `Code.gs`, `buildCrmResponse_()`.
 - **Datos:** `preliquidaciones`, `liquidaciones`, esquema de comisión.
-- **Resultado esperado:** Baja la métrica de pendientes del periodo actual.
+- **Resultado esperado:** La bandeja mantiene trazabilidad visual de contratos gestionados y la métrica de pendientes solo cuenta los contratos aún no preliquidados/cerrados.
 - **Casos especiales:** Facturación sí puede ver preliquidaciones pendientes.
 - **Validaciones relacionadas:** `preliquidadoPeriodoActual`, `liquidacionCerradaPeriodoActual`.
 - **Riesgo si se modifica:** Medio/alto; puede duplicar trabajo BTM.
@@ -147,7 +147,7 @@
 - **Descripción:** Nuevo negocio crea filas en `control` y `CONT/BTM`.
 - **Archivo y función:** `Code.gs`, `registrarNuevoNegocio()`.
 - **Datos:** Payload de formulario, usuario activo.
-- **Resultado esperado:** Radicación nueva en ambas hojas.
+- **Resultado esperado:** Radicación nueva en ambas hojas; en `CONT/BTM` se guarda Código Negocio FIDUSAP en columna B y Nombre del Negocio en columna D.
 - **Casos especiales:** Si ya existe radicación, lanza error.
 - **Validaciones relacionadas:** Radicación y nombre obligatorios.
 - **Riesgo si se modifica:** Alto; puede duplicar o perder asignaciones.
@@ -201,3 +201,36 @@
 - **Casos especiales:** Festivos no están modelados.
 - **Validaciones relacionadas:** Simulación de calendario.
 - **Riesgo si se modifica:** Medio; podría cambiar fechas de alertas.
+
+
+## BR-21 — Nuevo negocio con asignación notificada
+
+- **Descripción:** Al crear un negocio, `Tipo general` debe ser `Fija` o `Variable`, pueden registrarse varios tipos de comisión sugeridos, se muestran campos/preview de cálculo en una sección final dedicada, se guardan preliquidaciones iniciales cuando el usuario captura valores y se notifica a gerente/profesional BTM asignados.
+- **Archivo y función:** `Code.gs`, `registrarNuevoNegocio()`, `notifyAssignedBtmNewBusiness_()`; `Index.html`, formulario `newBusinessForm`; `JS.html`, `crearNuevoNegocio()`.
+- **Datos:** `control`, `CONT/BTM`, `Tabla de comisiones`.
+- **Resultado esperado:** El negocio queda creado con asignación BTM/contable, Código Negocio FIDUSAP en `CONT/BTM` columna B, Nombre del Negocio en columna D, las preliquidaciones iniciales con valores quedan en `preliquidaciones` y los BTM asignados reciben correo de aviso con plantilla visual estándar.
+- **Riesgo si se modifica:** Alto; afecta entrada de negocios y notificación operativa.
+
+## BR-22 — Reasignación temporal por BTM actual
+
+- **Descripción:** Solo el gerente BTM o profesional BTM actualmente asignado puede reasignar temporalmente gerente/profesional BTM en `CONT/BTM`.
+- **Archivo y función:** `Code.gs`, `reasignarBtmNegocio()`; `JS.html`, `crearBloqueReasignacionBtm()`.
+- **Datos:** `CONT/BTM` columnas W y X.
+- **Resultado esperado:** Usuarios no asignados no pueden reasignar el negocio.
+- **Riesgo si se modifica:** Alto; afecta control de asignaciones y confidencialidad.
+
+## BR-23 — Visualización sin preliquidación para negocios no activos
+
+- **Descripción:** Negocios en estado `Inactivo` o `En Liquidación` se pueden visualizar, pero no permiten generar preliquidaciones.
+- **Archivo y función:** `JS.html`, `crearFormularioPreliquidacion()`; `Code.gs`, `registrarPreliquidacionContrato()`.
+- **Datos:** `control` columna H.
+- **Resultado esperado:** La UI muestra bloqueo y el backend rechaza cualquier intento de preliquidar negocios no activos.
+- **Riesgo si se modifica:** Alto; puede permitir facturación sobre negocios no activos.
+
+## BR-24 — Filtros operativos de bandeja
+
+- **Descripción:** La bandeja permite filtrar por tipo de comisión, estado operativo (`Activo`, `Preliquidado`, `Pendiente`, `Inactivo`, `En Liquidación`) y buscar por radicación, código FIDUSAP o nombre/descripción del negocio.
+- **Archivo y función:** `JS.html`, `asegurarFiltroComision()`, `cambiarPerfilDeVista()`, `debeMostrarContrato()`.
+- **Datos:** `listaContratos` retornada por `Code.gs`.
+- **Resultado esperado:** El usuario puede ubicar contratos específicos sin alterar la lógica de permisos ni los cálculos de preliquidación.
+- **Riesgo si se modifica:** Medio; puede ocultar registros en UI si los filtros se aplican incorrectamente.
