@@ -865,7 +865,7 @@
 
   function normalizarPorcentaje(valor) {
     if (!valor) return 0;
-    return valor >= 1 ? valor / 100 : valor;
+    return valor / 100;
   }
 
   function formatoMoneda(valor) {

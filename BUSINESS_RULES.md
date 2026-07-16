@@ -174,10 +174,10 @@
 
 ## BR-18 — Regla de porcentaje
 
-- **Descripción:** En campos porcentuales, valores `>= 1` se dividen entre 100.
+- **Descripción:** En campos porcentuales, todo valor no cero se divide entre 100; `1` significa 1%, `3` significa 3%, `0,3` significa 0,3% y `0,05` significa 0,05%.
 - **Archivo y función:** `Code.gs`, `normalizeRate_()`; `JS.html`, `normalizarPorcentaje()`.
 - **Datos:** Campo cantidad en modo `porcentaje`.
-- **Resultado esperado:** `1` = 1%, `3` = 3%, `0,03` = 3% si viene normalizado desde hoja.
+- **Resultado esperado:** `1` = 1%, `3` = 3%, `0,3` = 0,3%, `0,05` = 0,05%.
 - **Casos especiales:** Depende de que el campo haya sido inferido como porcentaje.
 - **Validaciones relacionadas:** `inferCommissionFieldMode_()`.
 - **Riesgo si se modifica:** Alto; altera valores a facturar.

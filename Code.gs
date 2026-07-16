@@ -3,7 +3,7 @@
 // ============================================================================
 const CONFIG = {
   APP_TITLE: 'Fidu Gestión - CRM Lotes',
-  APP_VERSION: '0.2.8',
+  APP_VERSION: '0.2.9',
   SHEETS: {
     CONTROL: 'control',
     BTM: 'CONT/BTM',
@@ -1137,7 +1137,7 @@ function buildCommissionField_(label, key, tipo, descripcion, value, display, ba
     enabled: !isDisabledCommissionCell_(background),
     ejemplo: toCleanString_(display),
     valor: rawValue,
-    valorEntrada: mode === 'porcentaje' && rawValue > 0 && rawValue <= 1 ? rawValue * 100 : rawValue,
+    valorEntrada: rawValue,
     modo: mode
   };
 }
@@ -1204,8 +1204,7 @@ function calcularPreliquidacion_(tipo, valores) {
 
 function normalizeRate_(value) {
   if (!value) return 0;
-  if (value >= 1) return value / 100;
-  return value;
+  return value / 100;
 }
 
 function parseNumber_(value) {

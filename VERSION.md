@@ -2,9 +2,14 @@
 
 ## Versión actual
 
-- **Versión:** 0.2.8
+- **Versión:** 0.2.9
 - **Fecha:** 2026-07-16
-- **Entrega:** Unifica el look and feel de correos operativos con la plantilla visual de alertas diarias antes del vencimiento.
+- **Entrega:** Ajusta la normalización de porcentajes para que valores decimales escritos por el usuario se interpreten como porcentaje real.
+
+## 0.2.9
+
+- Cambia `normalizeRate_()` y `normalizarPorcentaje()` para dividir entre 100 todo valor porcentual no cero.
+- Documenta ejemplos: `1` = 1%, `3` = 3%, `0,3` = 0,3% y `0,05` = 0,05%.
 
 ## 0.2.8
 

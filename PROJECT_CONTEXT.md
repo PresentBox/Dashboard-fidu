@@ -210,7 +210,7 @@ No renombrar estas funciones sin actualizar `JS.html`.
 - Periodo operativo: días 1 y 2 del mes trabajan el mes anterior; día 3 inicia nuevo periodo.
 - IVA de preliquidación por defecto: 19%.
 - Si el tipo de comisión trae IVA desde tabla, backend usa ese valor.
-- Porcentajes: `1` significa `1%`; valores mayores o iguales a 1 se dividen entre 100 en campos porcentuales.
+- Porcentajes: cualquier valor no cero se divide entre 100 en campos porcentuales; `1` = 1%, `3` = 3%, `0,3` = 0,3% y `0,05` = 0,05%.
 - Salarios mínimos: valores como `0,65` multiplican directamente por SMMLV.
 
 ## 13. Estados actuales de procesos
@@ -350,3 +350,4 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Desde la versión 0.2.6, `registrarNuevoNegocio()` guarda en `CONT/BTM` el código FIDUSAP en columna B y el nombre del negocio en columna D, sin cambiar el registro en `control`.
 - Desde la versión 0.2.7, el formulario `Crear negocio` agrupa `Tipos de comisión sugeridos`, `Descripción de comisiones` y el preview de preliquidación inicial al final para mantener alineadas las cajas operativas principales.
 - Desde la versión 0.2.8, los correos operativos reutilizan el look and feel HTML de las alertas diarias previas al vencimiento.
+- Desde la versión 0.2.9, la normalización porcentual divide todo valor no cero entre 100 para representar porcentajes decimales escritos por el usuario.

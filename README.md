@@ -179,7 +179,7 @@ Cuando existe al menos una preliquidación del periodo para una radicación, esa
 
 ### Ajustes de cálculo de preliquidación
 
-Los campos porcentuales de la `Tabla de comisiones` se muestran al usuario como porcentaje entero cuando la hoja los almacena como decimal. Por ejemplo, un `3%` almacenado como `0,03` se presenta como `3` y se calcula como `3%`; si el usuario ingresa `1`, el cálculo interpreta `1%` (`0,01`) y no `100%`. Para cantidades de salarios mínimos, valores como `0,65` se conservan como `0,65` y se multiplican directamente por el SMMLV configurado.
+Los campos porcentuales de la `Tabla de comisiones` se interpretan como porcentaje escrito por el usuario y se dividen entre 100: `1` se calcula como 1% (`0,01`), `3` como 3% (`0,03`), `0,3` como 0,3% (`0,003`) y `0,05` como 0,05% (`0,0005`). Para cantidades de salarios mínimos, valores como `0,65` se conservan como `0,65` y se multiplican directamente por el SMMLV configurado.
 
 En el frontend el usuario puede agregar uno o varios tipos de comisión a un resumen temporal y luego guardar/cerrar la preliquidación. El sistema registra cada tipo como una línea independiente y devuelve el total consolidado del periodo seleccionado. La vista de Facturación muestra las preliquidaciones pendientes con subtotal, IVA y valor a facturar para dejarlas en firme en FIDUSAP.
 
