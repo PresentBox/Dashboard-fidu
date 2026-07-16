@@ -72,12 +72,12 @@
 - **Validaciones relacionadas:** `isSuperAdmin_()`, asignaciones.
 - **Riesgo si se modifica:** Alto; puede permitir preliquidaciones no autorizadas.
 
-## BR-08 — Preliquidación oculta de pendientes BTM
+## BR-08 — Preliquidación gestionada visible para BTM
 
-- **Descripción:** Si una radicación variable ya tiene preliquidación o cierre de liquidación del periodo, se oculta de la bandeja BTM; en negocios fijos/preliquidados visibles se muestra estado `Preliquidado` y se bloquea volver a preliquidar.
+- **Descripción:** Si una radicación ya tiene preliquidación o cierre de liquidación del periodo, permanece visible para el BTM asignado con estado `Preliquidado`/gestión cerrada y se bloquea volver a preliquidar.
 - **Archivo y función:** `JS.html`, `debeMostrarContrato()`; `Code.gs`, `buildCrmResponse_()`.
 - **Datos:** `preliquidaciones`, `liquidaciones`, esquema de comisión.
-- **Resultado esperado:** Baja la métrica de pendientes del periodo actual.
+- **Resultado esperado:** La bandeja mantiene trazabilidad visual de contratos gestionados y la métrica de pendientes solo cuenta los contratos aún no preliquidados/cerrados.
 - **Casos especiales:** Facturación sí puede ver preliquidaciones pendientes.
 - **Validaciones relacionadas:** `preliquidadoPeriodoActual`, `liquidacionCerradaPeriodoActual`.
 - **Riesgo si se modifica:** Medio/alto; puede duplicar trabajo BTM.

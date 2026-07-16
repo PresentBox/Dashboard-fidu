@@ -327,8 +327,6 @@
 
     if (estaEnVistaFacturacion()) {
       mostrarFila = tienePreliquidacionesPorFacturar(item);
-    } else if (item.esquemaComision === 'Variable' && (item.preliquidadoPeriodoActual || item.liquidacionCerradaPeriodoActual)) {
-      mostrarFila = false;
     }
 
     if (filterComision !== 'TODAS' && item.esquemaComision !== filterComision) {

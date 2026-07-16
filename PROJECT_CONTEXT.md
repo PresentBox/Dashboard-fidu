@@ -205,7 +205,7 @@ No renombrar estas funciones sin actualizar `JS.html`.
 - Súper Admin se lee desde la hoja `usuarios`; ya no existe lista bootstrap de Súper Admin en código.
 - BTM/profesional/gerente solo actúan sobre contratos asignados.
 - Facturación puede ver todos los negocios/preliquidaciones que correspondan a su flujo.
-- Contratos variables preliquidados para el periodo se ocultan de la bandeja BTM; contratos fijos/preliquidados visibles muestran estado `Preliquidado` y no permiten repetir preliquidación.
+- Contratos preliquidados o cerrados del periodo permanecen visibles para el BTM asignado con estado `Preliquidado`/gestión cerrada y no permiten repetir preliquidación.
 - Periodo operativo: días 1 y 2 del mes trabajan el mes anterior; día 3 inicia nuevo periodo.
 - IVA de preliquidación por defecto: 19%.
 - Si el tipo de comisión trae IVA desde tabla, backend usa ese valor.
@@ -344,3 +344,4 @@ Los cálculos críticos están detallados en `CALCULATIONS.md`. Resumen:
 - Cada cambio funcional debe incrementar la versión para facilitar validación entre GitHub y Apps Script.
 - Desde la versión 0.2.2, no hay correos bootstrap de Súper Admin en `Code.gs`; el perfil Súper Admin debe existir en `usuarios`.
 - Desde la versión 0.2.3, los mapas de facturación, liquidación y preliquidación normalizan periodos tipo fecha o texto `yyyy-MM` para reconocer correctamente registros del periodo actual.
+- Desde la versión 0.2.4, la bandeja BTM conserva visibles los contratos gestionados del periodo y los marca como `Preliquidado`/cerrados para mejorar trazabilidad de usuario.

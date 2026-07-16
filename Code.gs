@@ -3,7 +3,7 @@
 // ============================================================================
 const CONFIG = {
   APP_TITLE: 'Fidu Gestión - CRM Lotes',
-  APP_VERSION: '0.2.3',
+  APP_VERSION: '0.2.4',
   SHEETS: {
     CONTROL: 'control',
     BTM: 'CONT/BTM',

@@ -2,9 +2,9 @@
 
 ## Versión actual
 
-- **Versión:** 0.2.3
+- **Versión:** 0.2.4
 - **Fecha:** 2026-07-16
-- **Entrega:** Normaliza periodos guardados como fecha o texto para que las preliquidaciones del periodo se reconozcan, se muestre estado Preliquidado y Facturación vea los pendientes.
+- **Entrega:** Mantiene visibles para BTM los contratos ya gestionados del periodo, marcándolos como `Preliquidado` y bloqueando repetir preliquidación para una experiencia más consistente.
 
 ## Política de versionado operativa
 
