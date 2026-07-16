@@ -36,7 +36,7 @@
       <header class="topbar">
         <div>
           <span class="eyebrow">Página principal</span>
-          <h1>Fidu Gestión</h1>
+          <h1>Fidu Gestión <span id="appVersionBadge" class="app-version-badge">v-</span></h1>
         </div>
         <div class="profile-menu-wrapper">
           <button class="profile-photo profile-trigger" id="profileToggle" type="button" aria-label="Ver perfil"><span id="profileInitial">U</span></button>
@@ -129,7 +129,7 @@
             <div class="crm-toolbar">
               <div>
                 <span class="eyebrow">Nuevo negocio</span>
-                <div class="crm-section-title">Crear negocio para preliquidación</div>
+                <div class="crm-section-title">Crear negocio</div>
               </div>
             </div>
             <form id="newBusinessForm" class="new-business-form">
@@ -137,14 +137,26 @@
               <label><span>Código FIDUSAP</span><input name="codigoFidusap"></label>
               <label><span>Nombre del negocio</span><input name="nombreNegocio" required></label>
               <label><span>Estado</span><select name="estado"><option>Activo</option><option>Inactivo</option><option>En Liquidación</option></select></label>
-              <label><span>Tipo general</span><input name="tipoGeneral" placeholder="FIJA / VARIABLE / OTRO"></label>
-              <label><span>Tipo de comisión sugerido</span><select name="tipoComisionSugerida" id="newBusinessCommissionType"><option value="">Cargando tipos...</option></select></label>
-              <label><span>Descripción de comisiones</span><textarea name="descripcionComisiones" rows="4"></textarea></label>
+              <label><span>Tipo general</span><select name="tipoGeneral" required><option value="Variable">Variable</option><option value="Fija">Fija</option></select></label>
               <label><span>Fecha de constitución</span><input name="fechaConstitucion" type="date"></label>
               <label><span>Fecha de vigencia</span><input name="fechaVigencia" type="date"></label>
-              <label><span>Gerente BTM</span><input name="gerenteBtm" type="email" placeholder="gerente@bbva.com"></label>
-              <label><span>Profesional BTM</span><input name="profesionalBtm" type="email" placeholder="profesional@bbva.com"></label>
-              <label><span>Profesional especializado contable</span><input name="profesionalContable" type="email" placeholder="contador@bbva.com"></label>
+              <label><span>Gerente BTM</span><input name="gerenteBtm" type="email" list="gerentesBtmList" placeholder="gerente@bbva.com"></label>
+              <label><span>Profesional BTM</span><input name="profesionalBtm" type="email" list="profesionalesBtmList" placeholder="profesional@bbva.com"></label>
+              <label><span>Profesional especializado contable</span><input name="profesionalContable" type="email" list="profesionalesContablesList" placeholder="contador@bbva.com"></label>
+              <div class="new-business-commission-section">
+                <div class="commission-section-header">
+                  <span>Comisiones y preliquidación inicial</span>
+                  <small>Selecciona uno o varios tipos, revisa los campos de cálculo y agrega la descripción operativa al final del formulario.</small>
+                </div>
+                <div class="commission-section-grid">
+                  <label><span>Tipos de comisión sugeridos</span><select name="tiposComisionSugerida" id="newBusinessCommissionType" multiple size="5"><option value="">Cargando tipos...</option></select><small>Puedes seleccionar uno o varios tipos con Ctrl/Cmd + clic.</small></label>
+                  <label><span>Descripción de comisiones</span><textarea name="descripcionComisiones" rows="5" placeholder="Describe condiciones, alcance o notas operativas de las comisiones seleccionadas."></textarea></label>
+                </div>
+                <div id="newBusinessCommissionPreview" class="new-business-commission-preview"></div>
+              </div>
+              <datalist id="gerentesBtmList"></datalist>
+              <datalist id="profesionalesBtmList"></datalist>
+              <datalist id="profesionalesContablesList"></datalist>
               <div class="new-business-actions"><button id="btnCrearNegocio" class="crm-btn crm-btn-primary" type="submit"><i class="fa-solid fa-plus"></i> Crear negocio</button></div>
             </form>
           </section>
