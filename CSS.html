@@ -96,7 +96,10 @@
   .utility-card p { margin: 0; color: var(--bbva-navy); line-height: 1.5; }
 
   .profile-selector-box { display: flex; gap: 10px; align-items: center; }
-  .profile-selector-box select { padding: 11px 15px; font-size: 12px; font-weight: 700; border-radius: 12px; border: 1px solid transparent; color: var(--bbva-blue); cursor: pointer; background: #fff; box-shadow: var(--shadow-soft); }
+  .profile-selector-box select, .profile-selector-box input { padding: 11px 15px; font-size: 12px; font-weight: 700; border-radius: 12px; border: 1px solid transparent; color: var(--bbva-blue); background: #fff; box-shadow: var(--shadow-soft); }
+  .profile-selector-box select { cursor: pointer; }
+  .profile-selector-box input { min-width: 230px; color: var(--bbva-navy); }
+  .profile-selector-box input::placeholder { color: var(--muted); }
 
   .metrics-grid-crm { display: grid; grid-template-columns: repeat(8, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
   .metric-card-crm { background: var(--card); border-radius: 14px; padding: 12px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow-soft); min-height: 78px; }
@@ -202,4 +205,31 @@
 
   .floating-batch-bar-crm { left: 18px; right: 18px; flex-direction: column; gap: 12px; align-items: stretch; }
   }
+
+  .new-business-commission-preview {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 12px;
+  }
+
+  .new-business-preview-card {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+  }
+
+
+  .app-version-badge {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    margin-left: 8px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #eef4ff;
+    color: var(--bbva-blue);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
 </style>
